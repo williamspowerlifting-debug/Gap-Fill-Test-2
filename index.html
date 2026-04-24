@@ -261,7 +261,7 @@ function play(i,data){
 
 function repeat(){ play(currentSection, lessonCache); }
 
-/* ---------- FINAL INPUT FIX ---------- */
+/* ---------- FINAL INPUT FIX (UPDATED) ---------- */
 function renderText(data){
   const container=document.getElementById("text");
   container.innerHTML="";
@@ -281,6 +281,11 @@ function renderText(data){
         input.type="text";
         input.className="gap-input";
 
+        /* ✅ FIX: force input usability */
+        input.disabled = false;
+        input.readOnly = false;
+        input.style.pointerEvents = "auto";
+
         const id=`q${si}_${i}`;
         input.id=id;
         answersMap[id]=sec.answers[i]||"";
@@ -292,6 +297,15 @@ function renderText(data){
 
     container.appendChild(div);
   });
+
+  /* ✅ FIX: re-enable after render (preview mode fix) */
+  setTimeout(()=>{
+    document.querySelectorAll(".gap-input").forEach(i=>{
+      i.disabled = false;
+      i.readOnly = false;
+      i.style.pointerEvents = "auto";
+    });
+  },0);
 }
 
 /* ---------- CHECK ---------- */
