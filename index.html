@@ -9,26 +9,20 @@
 body{font-family:system-ui;background:#f8fafc;margin:0;}
 .container{max-width:900px;margin:40px auto;background:white;padding:24px;border-radius:16px;}
 
-video,iframe{width:100%;border-radius:10px;}
-
-h2,h3{margin-top:0;}
+video,#builderPlayer,#player{width:100%;border-radius:10px;}
 
 button{
   padding:8px 12px;margin:4px;border:none;border-radius:6px;
   background:#4f46e5;color:white;cursor:pointer;
 }
 .secondary{background:#e5e7eb;color:black;}
-button:disabled{opacity:0.5;}
 
 .section-builder{
   background:#f1f5f9;
   padding:12px;
   margin:12px 0;
   border-radius:10px;
-  cursor:pointer;
 }
-
-.section-active{outline:2px solid #4f46e5;}
 
 label{font-weight:bold;display:block;margin-top:6px;}
 
@@ -38,26 +32,17 @@ textarea,input{
   margin-top:4px;
 }
 
-.instructions{
-  background:#eef2ff;
-  padding:12px;
-  border-radius:10px;
-  margin-bottom:15px;
-}
-
+/* FIXED INPUTS */
 input.gap-input{
+  display:inline-block;
+  width:200px !important;
   border:1px solid #333;
-  width:200px;
-  display:block;
-  margin:8px 0;
+  padding:4px;
+  margin:6px 0;
+  background:white;
 }
 
-.correct{color:green;}
-.incorrect{color:red;}
-
-.controls{text-align:center;margin:15px 0;}
 #text{font-size:18px;line-height:1.8;}
-#result{text-align:center;margin-top:20px;font-weight:bold;}
 </style>
 </head>
 
@@ -67,20 +52,34 @@ input.gap-input{
 <script>
 const app = document.getElementById("app");
 
-let lessonData = null;
-let ytPlayer = null;
-let currentSection = 0;
-let stopTime = 0;
+let lessonData=null;
+let ytPlayer=null;
+let builderPlayer=null;
 
-let answersMap = {};
-let order = [];
-let checked = false;
-let ytLoaded = false;
+/* ------------------ YOUTUBE API SAFE LOADER ------------------ */
+function loadYouTubeAPI(callback){
+  if(window.YT && window.YT.Player){
+    callback();
+  } else {
+    const prev = window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady = () => {
+      if(prev) prev();
+      callback();
+    };
 
-// NEW timing system
-let builderPlayer = null;
-let activeSectionIndex = 0;
-let setMode = "start";
+    if(!document.querySelector('script[src*="youtube.com/iframe_api"]')){
+      const tag=document.createElement("script");
+      tag.src="https://www.youtube.com/iframe_api";
+      document.body.appendChild(tag);
+    }
+  }
+}
+
+/* ------------------ HELPERS ------------------ */
+function getYouTubeId(url){
+  const match = url.match(/(?:v=|youtu\.be\/|embed\/)([^&?]+)/);
+  return match ? match[1] : null;
+}
 
 function encodeData(obj){
   return encodeURIComponent(JSON.stringify(obj));
@@ -89,30 +88,20 @@ function decodeData(str){
   return JSON.parse(decodeURIComponent(str));
 }
 
-const params = new URLSearchParams(window.location.search);
-const raw = params.get("data");
+/* ------------------ ROUTING ------------------ */
+const params=new URLSearchParams(window.location.search);
+const raw=params.get("data");
 
 if(raw){
-  try{
-    loadStudent(decodeData(raw), false);
-  }catch(e){
-    app.innerHTML = "<h2>Error loading lesson</h2>";
-  }
+  loadStudent(decodeData(raw));
 }else{
   loadBuilder();
 }
 
-function loadBuilder(saved=null){
-
-  app.innerHTML = `
-    <h2>🎧 Lesson Builder</h2>
-
-    <div class="instructions">
-      • Paste a YouTube or MP4 link<br>
-      • Use ___ for gaps<br>
-      • Answers are comma-separated per section<br>
-      • Click a section, then click the video to set Start/End times
-    </div>
+/* ------------------ BUILDER ------------------ */
+function loadBuilder(){
+  app.innerHTML=`
+    <h2>Lesson Builder</h2>
 
     <label>Video URL</label>
     <input id="videoUrl">
@@ -122,333 +111,150 @@ function loadBuilder(saved=null){
     <h3>Sections</h3>
     <div id="sections"></div>
 
-    <button onclick="addSection()">+ Add Section</button>
-    <button onclick="preview()">👀 Preview</button>
-    <button onclick="generate()">🔗 Generate Link</button>
-
-    <p id="output"></p>
+    <button onclick="addSection()">Add Section</button>
+    <button onclick="preview()">Preview</button>
   `;
 
   document.getElementById("videoUrl").addEventListener("change", loadBuilderVideo);
-
-  if(saved){
-    document.getElementById("videoUrl").value = saved.videoUrl;
-    loadBuilderVideo();
-    saved.sections.forEach(s => addSection(s));
-  }else{
-    addSection();
-  }
+  addSection();
 }
 
 function loadBuilderVideo(){
-  const url = document.getElementById("videoUrl").value;
-  const container = document.getElementById("builderVideo");
+  const url=document.getElementById("videoUrl").value;
+  if(!url) return;
+
+  const container=document.getElementById("builderVideo");
 
   if(url.includes("youtube")){
-    const id = (url.match(/(?:v=|youtu\.be\/)([^&]+)/)||[])[1];
-    container.innerHTML = `<iframe id="builderPlayer" src="https://www.youtube.com/embed/${id}?enablejsapi=1"></iframe>`;
-    builderPlayer = null;
-  } else {
-    container.innerHTML = `<video id="builderPlayer" controls><source src="${url}"></video>`;
-    builderPlayer = document.getElementById("builderPlayer");
+    const id=getYouTubeId(url);
+    if(!id) return;
 
-    // click-to-set timing
-    builderPlayer.addEventListener("click", applyTimeFromVideo);
+    container.innerHTML=`<div id="builderPlayer"></div>`;
+
+    loadYouTubeAPI(()=>{
+      builderPlayer=new YT.Player("builderPlayer",{videoId:id});
+    });
+
+  } else {
+    container.innerHTML=`<video id="builderPlayer" controls><source src="${url}"></video>`;
+    builderPlayer=document.getElementById("builderPlayer");
   }
 }
 
-function addSection(data=null){
-  const div = document.createElement("div");
-  div.className = "section-builder";
+function getCurrentTime(){
+  if(!builderPlayer) return 0;
 
-  div.onclick = () => {
-    activeSectionIndex = [...document.querySelectorAll(".section-builder")].indexOf(div);
-    document.querySelectorAll(".section-builder").forEach(s => s.classList.remove("section-active"));
-    div.classList.add("section-active");
-  };
+  if(builderPlayer.currentTime!==undefined){
+    return builderPlayer.currentTime;
+  }
 
-  div.innerHTML = `
-    <h3>Section</h3>
+  if(builderPlayer.getCurrentTime){
+    return builderPlayer.getCurrentTime();
+  }
 
-    <label>Text (use ___ for gaps)</label>
-    <textarea class="text">${data?.text || ""}</textarea>
+  return 0;
+}
 
-    <label>Answers (comma separated)</label>
-    <input class="answers" value="${data?.answers?.join(",") || ""}">
+function addSection(){
+  const div=document.createElement("div");
+  div.className="section-builder";
 
-    <label>Start Time</label>
-    <input class="start" type="number" value="${data?.start || 0}">
-    <button onclick="setStart(this)">Set Start from Video</button>
+  div.innerHTML=`
+    <label>Text</label>
+    <textarea class="text"></textarea>
 
-    <label>End Time</label>
-    <input class="end" type="number" value="${data?.end || 0}">
-    <button onclick="setEnd(this)">Set End from Video</button>
+    <label>Answers</label>
+    <input class="answers" placeholder="comma separated">
+
+    <label>Start</label>
+    <input class="start">
+    <button onclick="setStart(this)">Set Start</button>
+
+    <label>End</label>
+    <input class="end">
+    <button onclick="setEnd(this)">Set End</button>
   `;
 
   document.getElementById("sections").appendChild(div);
 }
 
-function getCurrentTime(){
-  if(builderPlayer && builderPlayer.currentTime !== undefined){
-    return builderPlayer.currentTime;
-  }
-  return 0;
-}
-
-function applyTimeFromVideo(){
-  const sections = document.querySelectorAll(".section-builder");
-  const section = sections[activeSectionIndex];
-  if(!section) return;
-
-  const time = Math.floor(getCurrentTime());
-
-  if(setMode === "start"){
-    section.querySelector(".start").value = time;
-    setMode = "end";
-  } else {
-    section.querySelector(".end").value = time;
-    setMode = "start";
-  }
-}
-
 function setStart(btn){
-  const section = btn.closest(".section-builder");
-  section.querySelector(".start").value = Math.floor(getCurrentTime());
+  if(!builderPlayer) return alert("Video not ready");
+  btn.parentElement.querySelector(".start").value=Math.floor(getCurrentTime());
 }
-
 function setEnd(btn){
-  const section = btn.closest(".section-builder");
-  section.querySelector(".end").value = Math.floor(getCurrentTime());
+  if(!builderPlayer) return alert("Video not ready");
+  btn.parentElement.querySelector(".end").value=Math.floor(getCurrentTime());
 }
 
 function collect(){
-  const videoUrl = document.getElementById("videoUrl").value.trim();
-
-  const sections = [...document.querySelectorAll(".section-builder")].map(s => ({
-    text: s.querySelector(".text").value,
-    answers: s.querySelector(".answers").value.split(",").map(a => a.trim()),
-    start: +s.querySelector(".start").value,
-    end: +s.querySelector(".end").value
-  }));
-
-  return { videoUrl, sections };
-}
-
-function generate(){
-  const lesson = collect();
-  const link = `${location.origin}${location.pathname}?data=${encodeData(lesson)}`;
-  document.getElementById("output").innerHTML =
-    `<a href="${link}" target="_blank">Open Lesson</a><br>${link}`;
+  return {
+    videoUrl:document.getElementById("videoUrl").value,
+    sections:[...document.querySelectorAll(".section-builder")].map(s=>({
+      text:s.querySelector(".text").value,
+      answers:s.querySelector(".answers").value
+        .split(",")
+        .map(a=>a.trim()),
+      start:+s.querySelector(".start").value || 0,
+      end:+s.querySelector(".end").value || 0
+    }))
+  };
 }
 
 function preview(){
-  const lesson = collect();
-  app.innerHTML = "";
-  setTimeout(() => loadStudent(lesson, true), 0);
+  loadStudent(collect());
 }
 
-function loadStudent(lesson, isPreview){
+/* ------------------ STUDENT ------------------ */
+function loadStudent(data){
+  lessonData=data;
 
-  lessonData = lesson;
-  answersMap = {};
-  order = [];
-  checked = false;
-  currentSection = 0;
+  const isYT=data.videoUrl.includes("youtube");
 
-  if(ytPlayer?.destroy){
-    ytPlayer.destroy();
-    ytPlayer = null;
-  }
-
-  const isYT = lesson.videoUrl.includes("youtube");
-
-  app.innerHTML = `
-    <h2>🎧 Listening Practice ${isPreview ? "(Preview)" : ""}</h2>
-
-    ${isPreview ? `<button onclick="loadBuilder(lessonData)" class="secondary">⬅ Back</button>` : ""}
-
-    ${isYT ? `<div id="player"></div>` :
-      `<video id="video" controls><source src="${lesson.videoUrl}"></video>`}
-
-    <div class="controls" id="buttons"></div>
+  app.innerHTML=`
+    ${isYT?'<div id="player"></div>':`<video id="video" controls><source src="${data.videoUrl}"></video>`}
     <div id="text"></div>
-
-    <div class="controls">
-      <button onclick="checkAnswers()">Check Answers</button>
-      <button class="secondary" onclick="repeatSection()">Repeat</button>
-      <button id="revealBtn" class="secondary" onclick="revealAnswers()" disabled>Reveal</button>
-    </div>
-
-    <p id="result"></p>
   `;
 
-  if(isYT) loadYT(lesson.videoUrl);
+  if(isYT){
+    const id=getYouTubeId(data.videoUrl);
+    loadYouTubeAPI(()=>{
+      ytPlayer=new YT.Player("player",{videoId:id});
+    });
+  }
 
-  renderButtons();
   renderText();
 }
 
-function renderButtons(){
-  const container = document.getElementById("buttons");
-
-  lessonData.sections.forEach((_, i) => {
-    const b = document.createElement("button");
-    b.textContent = "Section " + (i + 1);
-    b.onclick = () => playSection(i);
-    container.appendChild(b);
-  });
-}
-
+/* ------------------ TEXT RENDER ------------------ */
 function renderText(){
-  const container = document.getElementById("text");
-  container.innerHTML = "";
+  const container=document.getElementById("text");
+  container.innerHTML="";
 
-  lessonData.sections.forEach((sec, si) => {
+  lessonData.sections.forEach((sec,si)=>{
+    let gapIndex=0;
+    const div=document.createElement("div");
 
-    let gapIndex = 0;
-    const div = document.createElement("div");
-    div.className = "section";
+    const parts=sec.text.split("___");
 
-    const parts = sec.text.split("___");
+    parts.forEach((part,i)=>{
+      div.appendChild(document.createTextNode(part));
 
-    parts.forEach((part, i) => {
+      if(i<parts.length-1){
+        const id=`q${si}_${gapIndex}`;
 
-      const span = document.createElement("span");
-      span.textContent = part;
-      div.appendChild(span);
-
-      if(i < parts.length - 1){
-        const id = `q${si}_${gapIndex}`;
-
-        answersMap[id] = sec.answers[gapIndex] || "";
-        order.push(id);
-
-        const input = document.createElement("input");
-        input.type = "text";
-        input.id = id;
-        input.className = "gap-input";
-
-        input.addEventListener("input", () => moveNext(id));
+        const input=document.createElement("input");
+        input.type="text";
+        input.className="gap-input";
+        input.id=id;
 
         div.appendChild(input);
-
         gapIndex++;
       }
     });
 
-    div.appendChild(document.createElement("br"));
-    div.appendChild(document.createElement("br"));
-
     container.appendChild(div);
   });
-}
-
-function moveNext(id){
-  const i = order.indexOf(id);
-  const next = document.getElementById(order[i + 1]);
-  if(next) next.focus();
-}
-
-function playSection(i){
-  currentSection = i;
-
-  document.querySelectorAll(".section").forEach((el, idx) => {
-    el.classList.toggle("section-active", idx === i);
-  });
-
-  const sec = lessonData.sections[i];
-  stopTime = sec.end;
-
-  if(ytPlayer){
-    ytPlayer.seekTo(sec.start, true);
-    ytPlayer.playVideo();
-
-    const t = setInterval(() => {
-      if(ytPlayer.getCurrentTime() >= stopTime){
-        ytPlayer.pauseVideo();
-        clearInterval(t);
-      }
-    }, 200);
-
-  } else {
-    const v = document.getElementById("video");
-    v.currentTime = sec.start;
-    v.play();
-
-    const t = setInterval(() => {
-      if(v.currentTime >= stopTime){
-        v.pause();
-        clearInterval(t);
-      }
-    }, 200);
-  }
-}
-
-function repeatSection(){
-  playSection(currentSection);
-}
-
-function loadYT(url){
-
-  function createPlayer(){
-    ytPlayer = new YT.Player("player", {
-      height: "400",
-      width: "100%",
-      videoId: (url.match(/(?:v=|youtu\.be\/)([^&]+)/) || [])[1]
-    });
-  }
-
-  if(window.YT?.Player){
-    createPlayer();
-  } else if(!ytLoaded){
-    ytLoaded = true;
-
-    const tag = document.createElement("script");
-    tag.src = "https://www.youtube.com/iframe_api";
-    document.body.appendChild(tag);
-
-    window.onYouTubeIframeAPIReady = createPlayer;
-  }
-}
-
-function checkAnswers(){
-  let score = 0;
-
-  for(const id in answersMap){
-    const input = document.getElementById(id);
-    if(!input) continue;
-
-    const correct = answersMap[id].toLowerCase().trim();
-    const user = input.value.toLowerCase().trim();
-
-    if(user === correct){
-      input.classList.add("correct");
-      score++;
-    } else {
-      input.classList.add("incorrect");
-    }
-  }
-
-  document.getElementById("result").innerText =
-    `Score: ${score} / ${Object.keys(answersMap).length}`;
-
-  checked = true;
-  document.getElementById("revealBtn").disabled = false;
-}
-
-function revealAnswers(){
-  if(!checked) return;
-
-  for(const id in answersMap){
-    let input = document.getElementById(id);
-
-    if(input){
-      input.value = answersMap[id];
-      input.classList.add("correct");
-    }
-  }
-
-  document.getElementById("result").innerText += " | Answers revealed";
 }
 </script>
 
