@@ -26,21 +26,27 @@ button{
   padding:8px 12px;margin:4px;border:none;border-radius:6px;
   background:#4f46e5;color:white;cursor:pointer;
 }
+.secondary{background:#e5e7eb;color:black;}
 
 #text{font-size:18px;line-height:2;margin-top:20px;}
 
-.gap{
+/* ✅ STABLE GAP INPUTS */
+.gap-wrap{
   display:inline-block;
-  min-width:120px;
-  padding:4px 8px;
-  border-bottom:2px solid #4f46e5;
   margin:0 4px;
 }
-.gap:focus{
+.gap-input{
+  width:120px;
+  border:none;
+  border-bottom:2px solid #4f46e5;
+  text-align:center;
+  font-size:16px;
   outline:none;
+  background:transparent;
+}
+.gap-input:focus{
   border-bottom:2px solid #10b981;
 }
-
 .correct{border-bottom:2px solid green;}
 .incorrect{border-bottom:2px solid red;}
 </style>
@@ -134,17 +140,17 @@ function addSection(data={}){
   div.className="section-builder";
 
   div.innerHTML=`
-    <div class="field-instruction">Enter text. Use ___ where students should type answers.</div>
+    <div class="field-instruction">Enter text. Use ___ for gaps.</div>
     <textarea class="text">${data.text||""}</textarea>
 
-    <div class="field-instruction">Enter answers in order, separated by commas.</div>
+    <div class="field-instruction">Answers (comma separated)</div>
     <input class="answers" value="${(data.answers||[]).join(",")}">
 
-    <div class="field-instruction">Start time (seconds). Use button while video is playing.</div>
+    <div class="field-instruction">Start time (use video + button)</div>
     <input class="start" value="${data.start||0}">
     <button onclick="setStart(this)">Set Start</button>
 
-    <div class="field-instruction">End time (seconds). Must be after start time.</div>
+    <div class="field-instruction">End time (must be after start)</div>
     <input class="end" value="${data.end||0}">
     <button onclick="setEnd(this)">Set End</button>
   `;
@@ -171,7 +177,8 @@ function preview(){ loadStudent(collect(),true); }
 function generate(){
   const data=encodeURIComponent(JSON.stringify(collect()));
   const link=`${location.origin}${location.pathname}?data=${data}`;
-  document.getElementById("link").innerHTML=`<a href="${link}" target="_blank">${link}</a>`;
+  document.getElementById("link").innerHTML=
+    `<b>Lesson Link:</b><br><a href="${link}" target="_blank">${link}</a>`;
 }
 
 /* ---------- STUDENT ---------- */
@@ -238,7 +245,7 @@ function play(i,data){
 
 function repeat(){ play(currentSection, lessonCache); }
 
-/* ---------- ANSWERS ---------- */
+/* ---------- INPUT FIX ---------- */
 function renderText(data){
   const container=document.getElementById("text");
   container.innerHTML="";
@@ -251,14 +258,19 @@ function renderText(data){
       div.appendChild(document.createTextNode(p));
 
       if(i<parts.length-1){
-        const span=document.createElement("span");
         const id=`q${si}_${i}`;
-        span.className="gap";
-        span.contentEditable=true;
-        span.id=id;
-
         answersMap[id]=sec.answers[i]||"";
-        div.appendChild(span);
+
+        const wrap=document.createElement("span");
+        wrap.className="gap-wrap";
+
+        const input=document.createElement("input");
+        input.type="text";
+        input.className="gap-input";
+        input.id=id;
+
+        wrap.appendChild(input);
+        div.appendChild(wrap);
       }
     });
 
@@ -266,12 +278,17 @@ function renderText(data){
   });
 }
 
+/* ---------- CHECK ---------- */
 function checkAnswers(){
   let score=0;
+  let attempted=false;
+
   Object.keys(answersMap).forEach(id=>{
     const el=document.getElementById(id);
+    if(el.value.trim()!=="") attempted=true;
+
     const correct=answersMap[id].toLowerCase();
-    const user=el.innerText.trim().toLowerCase();
+    const user=el.value.toLowerCase();
 
     if(user===correct){
       el.classList.add("correct");
@@ -283,13 +300,15 @@ function checkAnswers(){
 
   document.getElementById("result").innerText=`Score: ${score}/${Object.keys(answersMap).length}`;
   checked=true;
-  document.getElementById("revealBtn").disabled=false;
+
+  if(attempted){
+    document.getElementById("revealBtn").disabled=false;
+  }
 }
 
 function reveal(){
-  if(!checked) return;
   Object.keys(answersMap).forEach(id=>{
-    document.getElementById(id).innerText=answersMap[id];
+    document.getElementById(id).value=answersMap[id];
   });
 }
 </script>
