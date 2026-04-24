@@ -71,7 +71,7 @@ let lessonCache=null, currentSection=0, stopTimer=null;
 let answersMap={}, highlightMode=false;
 let hasChecked=false;
 
-/* ---------- GOOGLE DRIVE SUPPORT (NEW) ---------- */
+/* ✅ GOOGLE DRIVE SUPPORT */
 function getDriveVideoUrl(url){
   const match = url.match(/\/d\/([^\/]+)/);
   return match ? `https://drive.google.com/uc?export=download&id=${match[1]}` : url;
@@ -107,7 +107,7 @@ function loadBuilder(saved){
   app.innerHTML=`
     <h2>🎧 Lesson Builder</h2>
 
-    <div class="field-instruction">Enter a YouTube, MP4, or Google Drive video link.</div>
+    <div class="field-instruction">Enter a YouTube or MP4 video link.</div>
     <input id="videoUrl">
 
     <div id="builderVideo"></div>
@@ -142,7 +142,7 @@ function toggleHighlight(){
 
 function loadVideo(){
   let url=document.getElementById("videoUrl").value;
-  url = getDriveVideoUrl(url);  /* ✅ applied */
+  url = getDriveVideoUrl(url); /* ✅ applied */
 
   const box=document.getElementById("builderVideo");
 
@@ -163,6 +163,38 @@ function getTime(){
   return builderPlayer.currentTime!==undefined ? builderPlayer.currentTime : builderPlayer.getCurrentTime();
 }
 
-/* ---------- (NO OTHER CHANGES BELOW) ---------- */
+/* ---------- STUDENT ---------- */
+function loadStudent(data,previewMode){
+  lessonCache=data;
+  answersMap={};
+  hasChecked=false;
 
-/* Everything else remains EXACTLY unchanged */
+  app.innerHTML=`
+    ${previewMode?'<button onclick="loadBuilder(lessonCache)">⬅ Back</button>':""}
+    <h2>🎧 Listening Lesson</h2>
+
+    ${data.videoUrl.includes("youtube")
+      ?'<div id="player"></div>'
+      :`<video id="video" controls><source src="${getDriveVideoUrl(data.videoUrl)}"></video>`}
+
+    <div id="buttons"></div>
+    <div id="text"></div>
+
+    <button onclick="playAll()">▶ Play All</button>
+    <button onclick="checkAnswers()">Check Answers</button>
+    <button id="revealBtn" disabled onclick="reveal()">Reveal Answers</button>
+    <button onclick="repeat()">Repeat Section</button>
+
+    <p id="result"></p>
+  `;
+
+  if(data.videoUrl.includes("youtube")){
+    loadYT(()=>ytPlayer=new YT.Player("player",{videoId:getYTid(data.videoUrl)}));
+  }
+
+  renderButtons(data);
+  renderText(data);
+}
+</script>
+</body>
+</html>
