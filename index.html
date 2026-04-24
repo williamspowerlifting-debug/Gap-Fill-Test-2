@@ -84,7 +84,7 @@ function getYTid(url){
 const params=new URLSearchParams(location.search);
 const raw=params.get("data");
 
-if(raw){ loadStudent(JSON.parse(decodeURIComponent(raw))); }
+if(raw){ loadStudent(JSON.parse(decodeURIComponent(raw)), true); }
 else{ loadBuilder(); }
 
 /* ---------- BUILDER ---------- */
@@ -196,7 +196,7 @@ function validateSection(div){
   const warn=div.querySelector(".gap-warning");
   const preview=div.querySelector(".gap-preview");
 
-  warn.innerText = (gapCount!==answerCount)
+  warn.innerText=(gapCount!==answerCount)
     ? `⚠️ Gaps: ${gapCount} | Answers: ${answerCount} (must match)`
     : "";
 
@@ -223,7 +223,9 @@ function collect(){
   };
 }
 
-function preview(){ loadStudent(collect(),true); }
+function preview(){
+  loadStudent(collect(), true);
+}
 
 function generate(){
   const data=encodeURIComponent(JSON.stringify(collect()));
@@ -232,13 +234,13 @@ function generate(){
     `<b>Lesson Link:</b><br><a href="${link}" target="_blank">${link}</a>`;
 }
 
-/* ---------- STUDENT ---------- */
-function loadStudent(data,preview){
+/* ---------- STUDENT + PREVIEW ---------- */
+function loadStudent(data,previewMode){
   lessonCache=data;
   answersMap={};
 
   app.innerHTML=`
-    ${preview?'<button onclick="loadBuilder(lessonCache)">⬅ Back</button>':""}
+    ${previewMode?'<button onclick="loadBuilder(lessonCache)">⬅ Back</button>':""}
     <h2>🎧 Listening Lesson</h2>
 
     ${data.videoUrl.includes("youtube")
@@ -263,7 +265,7 @@ function loadStudent(data,preview){
   renderText(data);
 }
 
-/* ---------- SECTION BUTTONS (RESTORED) ---------- */
+/* ---------- SECTION BUTTONS (NOW IN BOTH STUDENT + PREVIEW) ---------- */
 function renderButtons(data){
   const box=document.getElementById("buttons");
   box.innerHTML="";
@@ -347,8 +349,6 @@ function play(i,data){
   }
 }
 
-function repeat(){ play(currentSection,lessonCache); }
-
 /* ---------- ANSWERS ---------- */
 function checkAnswers(){
   let score=0;
@@ -377,6 +377,8 @@ function reveal(){
     document.getElementById(id).value=answersMap[id];
   });
 }
+
+function repeat(){ play(currentSection, lessonCache); }
 </script>
 </body>
 </html>
