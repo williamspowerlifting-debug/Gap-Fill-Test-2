@@ -71,7 +71,10 @@ let builderPlayer=null, ytPlayer=null, ytReady=false;
 let lessonCache=null, currentSection=0, stopTimer=null;
 let answersMap={}, highlightMode=false;
 let hasChecked=false;   /* ✅ NEW FLAG */
-
+function getDriveVideoUrl(url){
+  const match = url.match(/\/d\/([^\/]+)/);
+  return match ? `https://drive.google.com/uc?export=download&id=${match[1]}` : url;
+}
 /* ---------- YT ---------- */
 function loadYT(cb){
   if(window.YT && YT.Player){ cb(); }
@@ -136,7 +139,8 @@ function toggleHighlight(){
 }
 
 function loadVideo(){
-  const url=document.getElementById("videoUrl").value;
+  let url=document.getElementById("videoUrl").value;
+url = getDriveVideoUrl(url);
   const box=document.getElementById("builderVideo");
 
   ytReady=false;
@@ -255,7 +259,7 @@ function loadStudent(data,previewMode){
 
     ${data.videoUrl.includes("youtube")
       ?'<div id="player"></div>'
-      :`<video id="video" controls><source src="${data.videoUrl}"></video>`}
+      :`<video id="video" controls><source src="${getDriveVideoUrl(data.videoUrl)}"></video>`}
 
     <div id="buttons"></div>
     <div id="text"></div>
