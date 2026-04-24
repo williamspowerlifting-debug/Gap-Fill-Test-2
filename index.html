@@ -44,29 +44,18 @@ textarea,input{
   margin-bottom:15px;
 }
 
-.gap{
-  border-bottom:2px solid #333;
-  padding:2px 12px;
-  cursor:pointer;
-}
-
 input.gap-input{
-  border:none;
-  border-bottom:2px solid #333;
-  width:120px;
-
-  /* FIX: ensure clickable */
-  position:relative;
-  z-index:20;
-  pointer-events:auto;
+  border:1px solid #333;
+  width:200px;
+  display:block;
+  margin:8px 0;
 }
 
 .correct{color:green;}
 .incorrect{color:red;}
 
 .controls{text-align:center;margin:15px 0;}
-#text{font-size:18px;line-height:1.8; position:relative; z-index:10;}
-.section{position:relative; z-index:10;}
+#text{font-size:18px;line-height:1.8;}
 #result{text-align:center;margin-top:20px;font-weight:bold;}
 </style>
 </head>
@@ -240,7 +229,7 @@ function renderButtons(){
   });
 }
 
-/* FIXED */
+/* ✅ NEW SIMPLE TEXTBOX RENDERING */
 function renderText(){
   const container = document.getElementById("text");
   container.innerHTML = "";
@@ -255,7 +244,9 @@ function renderText(){
 
     parts.forEach((part, i) => {
 
-      div.appendChild(document.createTextNode(part));
+      const span = document.createElement("span");
+      span.textContent = part;
+      div.appendChild(span);
 
       if(i < parts.length - 1){
         const id = `q${si}_${gapIndex}`;
@@ -267,7 +258,6 @@ function renderText(){
         input.type = "text";
         input.id = id;
         input.className = "gap-input";
-        input.style.pointerEvents = "auto";
 
         input.addEventListener("input", () => moveNext(id));
 
