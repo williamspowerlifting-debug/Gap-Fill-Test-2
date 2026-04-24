@@ -25,6 +25,7 @@ button:disabled{opacity:0.5;}
   padding:12px;
   margin:12px 0;
   border-radius:10px;
+  cursor:pointer;
 }
 
 .section-active{outline:2px solid #4f46e5;}
@@ -76,6 +77,11 @@ let order = [];
 let checked = false;
 let ytLoaded = false;
 
+// NEW timing system
+let builderPlayer = null;
+let activeSectionIndex = 0;
+let setMode = "start";
+
 function encodeData(obj){
   return encodeURIComponent(JSON.stringify(obj));
 }
@@ -104,11 +110,14 @@ function loadBuilder(saved=null){
     <div class="instructions">
       • Paste a YouTube or MP4 link<br>
       • Use ___ for gaps<br>
-      • Answers are comma-separated per section
+      • Answers are comma-separated per section<br>
+      • Click a section, then click the video to set Start/End times
     </div>
 
     <label>Video URL</label>
     <input id="videoUrl">
+
+    <div id="builderVideo"></div>
 
     <h3>Sections</h3>
     <div id="sections"></div>
@@ -120,17 +129,43 @@ function loadBuilder(saved=null){
     <p id="output"></p>
   `;
 
+  document.getElementById("videoUrl").addEventListener("change", loadBuilderVideo);
+
   if(saved){
     document.getElementById("videoUrl").value = saved.videoUrl;
+    loadBuilderVideo();
     saved.sections.forEach(s => addSection(s));
   }else{
     addSection();
   }
 }
 
+function loadBuilderVideo(){
+  const url = document.getElementById("videoUrl").value;
+  const container = document.getElementById("builderVideo");
+
+  if(url.includes("youtube")){
+    const id = (url.match(/(?:v=|youtu\.be\/)([^&]+)/)||[])[1];
+    container.innerHTML = `<iframe id="builderPlayer" src="https://www.youtube.com/embed/${id}?enablejsapi=1"></iframe>`;
+    builderPlayer = null;
+  } else {
+    container.innerHTML = `<video id="builderPlayer" controls><source src="${url}"></video>`;
+    builderPlayer = document.getElementById("builderPlayer");
+
+    // click-to-set timing
+    builderPlayer.addEventListener("click", applyTimeFromVideo);
+  }
+}
+
 function addSection(data=null){
   const div = document.createElement("div");
   div.className = "section-builder";
+
+  div.onclick = () => {
+    activeSectionIndex = [...document.querySelectorAll(".section-builder")].indexOf(div);
+    document.querySelectorAll(".section-builder").forEach(s => s.classList.remove("section-active"));
+    div.classList.add("section-active");
+  };
 
   div.innerHTML = `
     <h3>Section</h3>
@@ -143,12 +178,47 @@ function addSection(data=null){
 
     <label>Start Time</label>
     <input class="start" type="number" value="${data?.start || 0}">
+    <button onclick="setStart(this)">Set Start from Video</button>
 
     <label>End Time</label>
     <input class="end" type="number" value="${data?.end || 0}">
+    <button onclick="setEnd(this)">Set End from Video</button>
   `;
 
   document.getElementById("sections").appendChild(div);
+}
+
+function getCurrentTime(){
+  if(builderPlayer && builderPlayer.currentTime !== undefined){
+    return builderPlayer.currentTime;
+  }
+  return 0;
+}
+
+function applyTimeFromVideo(){
+  const sections = document.querySelectorAll(".section-builder");
+  const section = sections[activeSectionIndex];
+  if(!section) return;
+
+  const time = Math.floor(getCurrentTime());
+
+  if(setMode === "start"){
+    section.querySelector(".start").value = time;
+    setMode = "end";
+  } else {
+    section.querySelector(".end").value = time;
+    setMode = "start";
+  }
+}
+
+function setStart(btn){
+  const section = btn.closest(".section-builder");
+  section.querySelector(".start").value = Math.floor(getCurrentTime());
+}
+
+function setEnd(btn){
+  const section = btn.closest(".section-builder");
+  section.querySelector(".end").value = Math.floor(getCurrentTime());
 }
 
 function collect(){
@@ -229,7 +299,6 @@ function renderButtons(){
   });
 }
 
-/* ✅ NEW SIMPLE TEXTBOX RENDERING */
 function renderText(){
   const container = document.getElementById("text");
   container.innerHTML = "";
