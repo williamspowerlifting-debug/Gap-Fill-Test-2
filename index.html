@@ -6,45 +6,58 @@
 <title>Listening Lesson Builder</title>
 
 <style>
-body{
-  font-family:system-ui;
-  background:#f8fafc;
-  margin:0;
-}
+body{font-family:system-ui;background:#f8fafc;margin:0;}
+.container{max-width:900px;margin:40px auto;background:white;padding:24px;border-radius:16px;}
 
-.container{
-  max-width:900px;
-  margin:40px auto;
-  background:white;
-  padding:24px;
-  border-radius:16px;
-}
+video,iframe{width:100%;border-radius:10px;}
 
-input, textarea{
-  width:100%;
-  padding:8px;
-  margin:6px 0;
-}
+h2,h3{margin-top:0;}
 
 button{
-  padding:10px;
-  margin-top:10px;
-  border:none;
-  background:#4f46e5;
-  color:white;
-  border-radius:8px;
-  cursor:pointer;
+  padding:8px 12px;margin:4px;border:none;border-radius:6px;
+  background:#4f46e5;color:white;cursor:pointer;
 }
+.secondary{background:#e5e7eb;color:black;}
+button:disabled{opacity:0.5;}
 
-.section{
+.section-builder{
   background:#f1f5f9;
   padding:12px;
-  margin:10px 0;
+  margin:12px 0;
   border-radius:10px;
+}
+
+.section-active{outline:2px solid #4f46e5;}
+
+label{font-weight:bold;display:block;margin-top:6px;}
+
+textarea,input{
+  width:100%;
+  padding:6px;
+  margin-top:4px;
+}
+
+.instructions{
+  background:#eef2ff;
+  padding:12px;
+  border-radius:10px;
+  margin-bottom:15px;
+}
+
+input.gap-input{
+  border:none;
+  border-bottom:2px solid #333;
+  width:120px;
+  outline:none;
+  background:transparent;
 }
 
 .correct{color:green;}
 .incorrect{color:red;}
+
+.controls{text-align:center;margin:15px 0;}
+#text{font-size:18px;line-height:1.8;}
+#result{text-align:center;margin-top:20px;font-weight:bold;}
 </style>
 </head>
 
@@ -52,185 +65,305 @@ button{
 <div class="container" id="app"></div>
 
 <script>
+const app = document.getElementById("app");
 
-// ==========================
-// DETECT MODE
-// ==========================
-const urlParams = new URLSearchParams(window.location.search);
-const dataParam = urlParams.get("data");
+let lessonData = null;
+let ytPlayer = null;
+let currentSection = 0;
+let stopTime = 0;
 
-if(dataParam){
-  loadStudentMode(JSON.parse(atob(dataParam)));
-} else {
+let answersMap = {};
+let order = [];
+let checked = false;
+let ytLoaded = false;
+
+function encodeData(obj){
+  return encodeURIComponent(JSON.stringify(obj));
+}
+function decodeData(str){
+  return JSON.parse(decodeURIComponent(str));
+}
+
+const params = new URLSearchParams(window.location.search);
+const raw = params.get("data");
+
+if(raw){
+  try{
+    loadStudent(decodeData(raw), false);
+  }catch(e){
+    app.innerHTML = "<h2>Error loading lesson</h2>";
+  }
+}else{
   loadBuilder();
 }
 
-// ==========================
-// BUILDER MODE
-// ==========================
-function loadBuilder(){
-
-  const app = document.getElementById("app");
+function loadBuilder(saved=null){
 
   app.innerHTML = `
     <h2>🎧 Lesson Builder</h2>
 
+    <div class="instructions">
+      • Paste a YouTube or MP4 link<br>
+      • Use ___ for gaps<br>
+      • Answers are comma-separated per section
+    </div>
+
     <label>Video URL</label>
-    <input id="videoUrl" placeholder="video.mp4 or full URL">
+    <input id="videoUrl">
 
     <h3>Sections</h3>
     <div id="sections"></div>
 
     <button onclick="addSection()">+ Add Section</button>
+    <button onclick="preview()">👀 Preview</button>
+    <button onclick="generate()">🔗 Generate Link</button>
 
-    <br><br>
-    <button onclick="generate()">Generate Lesson Link</button>
-
-    <p id="linkOutput"></p>
+    <p id="output"></p>
   `;
 
-  addSection();
+  if(saved){
+    document.getElementById("videoUrl").value = saved.videoUrl;
+    saved.sections.forEach(s => addSection(s));
+  }else{
+    addSection();
+  }
 }
 
-function addSection(){
-  const container = document.getElementById("sections");
-
+function addSection(data=null){
   const div = document.createElement("div");
-  div.className = "section";
+  div.className = "section-builder";
 
   div.innerHTML = `
+    <h3>Section</h3>
+
     <label>Text (use ___ for gaps)</label>
-    <textarea class="text"></textarea>
+    <textarea class="text">${data?.text || ""}</textarea>
 
     <label>Answers (comma separated)</label>
-    <input class="answers">
+    <input class="answers" value="${data?.answers?.join(",") || ""}">
 
-    <label>Start time (seconds)</label>
-    <input class="start" type="number">
+    <label>Start Time</label>
+    <input class="start" type="number" value="${data?.start || 0}">
 
-    <label>End time (seconds)</label>
-    <input class="end" type="number">
+    <label>End Time</label>
+    <input class="end" type="number" value="${data?.end || 0}">
   `;
 
-  container.appendChild(div);
+  document.getElementById("sections").appendChild(div);
+}
+
+function collect(){
+  const videoUrl = document.getElementById("videoUrl").value.trim();
+
+  const sections = [...document.querySelectorAll(".section-builder")].map(s => ({
+    text: s.querySelector(".text").value,
+    answers: s.querySelector(".answers").value.split(",").map(a => a.trim()),
+    start: +s.querySelector(".start").value,
+    end: +s.querySelector(".end").value
+  }));
+
+  return { videoUrl, sections };
 }
 
 function generate(){
-
-  const videoUrl = document.getElementById("videoUrl").value;
-
-  const sections = [];
-
-  document.querySelectorAll(".section").forEach(sec=>{
-    sections.push({
-      text: sec.querySelector(".text").value,
-      answers: sec.querySelector(".answers").value.split(",").map(a=>a.trim()),
-      start: Number(sec.querySelector(".start").value),
-      end: Number(sec.querySelector(".end").value)
-    });
-  });
-
-  const lesson = {videoUrl, sections};
-
-  const encoded = btoa(JSON.stringify(lesson));
-
-  const link = `${location.origin}${location.pathname}?data=${encoded}`;
-
-  document.getElementById("linkOutput").innerHTML =
-    `<a href="${link}" target="_blank">👉 Open Lesson</a><br><br>
-     Copy link:<br>${link}`;
+  const lesson = collect();
+  const link = `${location.origin}${location.pathname}?data=${encodeData(lesson)}`;
+  document.getElementById("output").innerHTML =
+    `<a href="${link}" target="_blank">Open Lesson</a><br>${link}`;
 }
 
-// ==========================
-// STUDENT MODE
-// ==========================
-function loadStudentMode(data){
+function preview(){
+  const lesson = collect();
+  app.innerHTML = "";
+  setTimeout(() => loadStudent(lesson, true), 0);
+}
 
-  const app = document.getElementById("app");
+function loadStudent(lesson, isPreview){
 
-  let inputIndex = 1;
-  let allAnswers = [];
+  lessonData = lesson;
+  answersMap = {};
+  order = [];
+  checked = false;
+  currentSection = 0;
+
+  if(ytPlayer?.destroy){
+    ytPlayer.destroy();
+    ytPlayer = null;
+  }
+
+  const isYT = lesson.videoUrl.includes("youtube");
 
   app.innerHTML = `
-    <h2>🎧 Listening Practice</h2>
-    <video id="video" controls width="100%" src="${data.videoUrl}"></video>
-    <div id="sections"></div>
-    <button onclick="checkAnswers()">Check Answers</button>
-    <button id="revealBtn" onclick="revealAnswers()" disabled>Reveal Answers</button>
+    <h2>🎧 Listening Practice ${isPreview ? "(Preview)" : ""}</h2>
+
+    ${isPreview ? `<button onclick="loadBuilder(lessonData)" class="secondary">⬅ Back</button>` : ""}
+
+    ${isYT ? `<div id="player"></div>` :
+      `<video id="video" controls><source src="${lesson.videoUrl}"></video>`}
+
+    <div class="controls" id="buttons"></div>
+    <div id="text"></div>
+
+    <div class="controls">
+      <button onclick="checkAnswers()">Check Answers</button>
+      <button class="secondary" onclick="repeatSection()">Repeat</button>
+      <button id="revealBtn" class="secondary" onclick="revealAnswers()" disabled>Reveal</button>
+    </div>
+
     <p id="result"></p>
   `;
 
-  const video = document.getElementById("video");
-  const sectionsDiv = document.getElementById("sections");
+  if(isYT) loadYT(lesson.videoUrl);
 
-  data.sections.forEach((sec,i)=>{
+  renderButtons();
+  renderText();
+}
+
+function renderButtons(){
+  const container = document.getElementById("buttons");
+
+  lessonData.sections.forEach((_, i) => {
+    const b = document.createElement("button");
+    b.textContent = "Section " + (i + 1);
+    b.onclick = () => playSection(i);
+    container.appendChild(b);
+  });
+}
+
+function renderText(){
+  const container = document.getElementById("text");
+  container.innerHTML = "";
+
+  lessonData.sections.forEach((sec, si) => {
+
+    let gapIndex = 0;
+
+    let html = sec.text.replace(/___/g, () => {
+      const id = `q${si}_${gapIndex}`;
+
+      answersMap[id] = sec.answers[gapIndex] || "";
+      order.push(id);
+
+      gapIndex++;
+
+      return `<input id="${id}" class="gap-input" oninput="moveNext('${id}')" />`;
+    });
 
     const div = document.createElement("div");
     div.className = "section";
+    div.innerHTML = html + "<br><br>";
 
-    let text = sec.text;
-
-    sec.answers.forEach(ans=>{
-      const inputHTML = `<input id="q${inputIndex}">`;
-      text = text.replace("___", inputHTML);
-      allAnswers.push(ans);
-      inputIndex++;
-    });
-
-    div.innerHTML = `
-      <div onclick="playSection(${sec.start},${sec.end})" style="cursor:pointer;">
-        ▶ ${text}
-      </div>
-    `;
-
-    sectionsDiv.appendChild(div);
+    container.appendChild(div);
   });
-
-  window.playSection = function(start,end){
-    video.currentTime = start;
-    video.play();
-
-    const interval = setInterval(()=>{
-      if(video.currentTime >= end){
-        video.pause();
-        clearInterval(interval);
-      }
-    },200);
-  };
-
-  window.checkAnswers = function(){
-    let score=0;
-
-    allAnswers.forEach((ans,i)=>{
-      const input=document.getElementById("q"+(i+1));
-
-      if(input.value.toLowerCase().trim()===ans){
-        input.classList.add("correct");
-        input.classList.remove("incorrect");
-        score++;
-      } else {
-        input.classList.add("incorrect");
-        input.classList.remove("correct");
-      }
-    });
-
-    document.getElementById("result").innerText =
-      `Score: ${score} / ${allAnswers.length}`;
-
-    document.getElementById("revealBtn").disabled = false;
-  };
-
-  window.revealAnswers = function(){
-    allAnswers.forEach((ans,i)=>{
-      const input=document.getElementById("q"+(i+1));
-      input.value = ans;
-      input.classList.add("correct");
-    });
-
-    document.getElementById("result").innerText += " | Answers revealed";
-  };
 }
 
+function moveNext(id){
+  const i = order.indexOf(id);
+  const next = document.getElementById(order[i + 1]);
+  if(next) next.focus();
+}
+
+function playSection(i){
+  currentSection = i;
+
+  document.querySelectorAll(".section").forEach((el, idx) => {
+    el.classList.toggle("section-active", idx === i);
+  });
+
+  const sec = lessonData.sections[i];
+  stopTime = sec.end;
+
+  if(ytPlayer){
+    ytPlayer.seekTo(sec.start, true);
+    ytPlayer.playVideo();
+
+    const t = setInterval(() => {
+      if(ytPlayer.getCurrentTime() >= stopTime){
+        ytPlayer.pauseVideo();
+        clearInterval(t);
+      }
+    }, 200);
+
+  } else {
+    const v = document.getElementById("video");
+    v.currentTime = sec.start;
+    v.play();
+
+    const t = setInterval(() => {
+      if(v.currentTime >= stopTime){
+        v.pause();
+        clearInterval(t);
+      }
+    }, 200);
+  }
+}
+
+function repeatSection(){
+  playSection(currentSection);
+}
+
+function loadYT(url){
+
+  function createPlayer(){
+    ytPlayer = new YT.Player("player", {
+      height: "400",
+      width: "100%",
+      videoId: (url.match(/(?:v=|youtu\.be\/)([^&]+)/) || [])[1]
+    });
+  }
+
+  if(window.YT?.Player){
+    createPlayer();
+  } else if(!ytLoaded){
+    ytLoaded = true;
+
+    const tag = document.createElement("script");
+    tag.src = "https://www.youtube.com/iframe_api";
+    document.body.appendChild(tag);
+
+    window.onYouTubeIframeAPIReady = createPlayer;
+  }
+}
+
+function checkAnswers(){
+  let score = 0;
+
+  for(const id in answersMap){
+    const input = document.getElementById(id);
+    if(!input) continue;
+
+    const correct = answersMap[id].toLowerCase().trim();
+    const user = input.value.toLowerCase().trim();
+
+    if(user === correct){
+      input.classList.add("correct");
+      score++;
+    } else {
+      input.classList.add("incorrect");
+    }
+  }
+
+  document.getElementById("result").innerText =
+    `Score: ${score} / ${Object.keys(answersMap).length}`;
+
+  checked = true;
+  document.getElementById("revealBtn").disabled = false;
+}
+
+function revealAnswers(){
+  if(!checked) return;
+
+  for(const id in answersMap){
+    let input = document.getElementById(id);
+
+    if(input){
+      input.value = answersMap[id];
+      input.classList.add("correct");
+    }
+  }
+
+  document.getElementById("result").innerText += " | Answers revealed";
+}
 </script>
 
 </body>
