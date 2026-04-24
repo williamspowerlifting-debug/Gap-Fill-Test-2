@@ -9,24 +9,15 @@
 body{font-family:system-ui;background:#f8fafc;margin:0;}
 .container{max-width:900px;margin:40px auto;background:white;padding:24px;border-radius:16px;}
 
-video,#player,#builderPlayer{width:100%;position:relative;z-index:1;}
+video,#player,#builderPlayer{width:100%;}
 
 .section-builder{background:#f1f5f9;padding:12px;margin:12px 0;border-radius:10px;}
 .section-active{outline:2px solid #4f46e5;}
 
 label{font-weight:bold;display:block;margin-top:8px;}
-
 textarea,input{width:100%;padding:6px;margin-top:4px;}
 
 .instructions{background:#eef2ff;padding:12px;border-radius:10px;margin-bottom:12px;}
-
-input.gap-input{
-  display:inline-block;
-  width:180px !important;
-  border:1px solid #333;
-  background:white;
-  margin:0 6px;
-}
 
 button{
   padding:8px 12px;margin:4px;border:none;border-radius:6px;
@@ -35,6 +26,31 @@ button{
 .secondary{background:#e5e7eb;color:black;}
 
 #text{font-size:18px;line-height:2;margin-top:20px;}
+
+/* ✅ HIGH-RELIABILITY INPUT SYSTEM */
+.line{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  gap:6px;
+  margin-bottom:10px;
+}
+
+.gap-input{
+  width:140px;
+  padding:6px;
+  border:2px solid #cbd5f5;
+  border-radius:6px;
+  font-size:16px;
+  transition:0.2s;
+}
+
+.gap-input:focus{
+  outline:none;
+  border-color:#4f46e5;
+  box-shadow:0 0 0 2px rgba(79,70,229,0.2);
+}
+
 .correct{border-color:green;}
 .incorrect{border-color:red;}
 </style>
@@ -48,7 +64,7 @@ const app=document.getElementById("app");
 
 let builderPlayer=null, ytPlayer=null, ytReady=false;
 let currentSection=0, stopTimer=null;
-let answersMap={}, checked=false;
+let answersMap={}, lessonCache=null, checked=false;
 
 /* ---------- YT ---------- */
 function loadYT(cb){
@@ -77,14 +93,15 @@ else{ loadBuilder(); }
 
 /* ---------- BUILDER ---------- */
 function loadBuilder(saved){
+  lessonCache=saved || null;
+
   app.innerHTML=`
     <h2>🎧 Lesson Builder</h2>
 
     <div class="instructions">
-      • Paste YouTube/MP4 link<br>
       • Use ___ for gaps<br>
       • Answers comma-separated<br>
-      • Use buttons to set times
+      • Set times using video
     </div>
 
     <label>Video URL</label>
@@ -92,7 +109,6 @@ function loadBuilder(saved){
 
     <div id="builderVideo"></div>
 
-    <h3>Sections</h3>
     <div id="sections"></div>
 
     <button onclick="addSection()">+ Add Section</button>
@@ -118,9 +134,8 @@ function loadVideo(){
   ytReady=false; builderPlayer=null;
 
   if(url.includes("youtube")){
-    const id=getYTid(url);
     box.innerHTML=`<div id="builderPlayer"></div>`;
-    loadYT(()=>builderPlayer=new YT.Player("builderPlayer",{videoId:id,events:{onReady:()=>ytReady=true}}));
+    loadYT(()=>builderPlayer=new YT.Player("builderPlayer",{videoId:getYTid(url),events:{onReady:()=>ytReady=true}}));
   } else {
     box.innerHTML=`<video id="builderPlayer" controls><source src="${url}"></video>`;
     builderPlayer=document.getElementById("builderPlayer");
@@ -129,7 +144,7 @@ function loadVideo(){
 }
 
 function getTime(){
-  if(!builderPlayer||!ytReady){alert("Video not ready");return 0;}
+  if(!builderPlayer||!ytReady) return 0;
   return builderPlayer.currentTime!==undefined ? builderPlayer.currentTime : builderPlayer.getCurrentTime();
 }
 
@@ -138,17 +153,10 @@ function addSection(data={}){
   div.className="section-builder";
 
   div.innerHTML=`
-    <label>Text</label>
     <textarea class="text">${data.text||""}</textarea>
-
-    <label>Answers</label>
     <input class="answers" value="${(data.answers||[]).join(",")}">
-
-    <label>Start</label>
     <input class="start" value="${data.start||0}">
     <button onclick="setStart(this)">Set Start</button>
-
-    <label>End</label>
     <input class="end" value="${data.end||0}">
     <button onclick="setEnd(this)">Set End</button>
   `;
@@ -175,24 +183,24 @@ function preview(){ loadStudent(collect(),true); }
 function generate(){
   const data=encodeURIComponent(JSON.stringify(collect()));
   const link=`${location.origin}${location.pathname}?data=${data}`;
-  document.getElementById("link").innerHTML=
-    `<b>Lesson Link:</b><br><a href="${link}" target="_blank">${link}</a>`;
+  document.getElementById("link").innerHTML=`<a href="${link}" target="_blank">${link}</a>`;
 }
 
 /* ---------- STUDENT ---------- */
 function loadStudent(data,preview){
+  lessonCache=data;
   answersMap={}; checked=false;
 
   app.innerHTML=`
     <h2>🎧 Listening Lesson</h2>
-    ${preview?'<button onclick="loadBuilder(data)">⬅ Back</button>':""}
+    ${preview?'<button onclick="loadBuilder(lessonCache)">⬅ Back</button>':""}
     ${data.videoUrl.includes("youtube")?'<div id="player"></div>':`<video id="video" controls><source src="${data.videoUrl}"></video>`}
 
     <div id="buttons"></div>
     <div id="text"></div>
 
     <button onclick="checkAnswers()">Check Answers</button>
-    <button id="revealBtn" class="secondary" disabled onclick="reveal()">Reveal Answers</button>
+    <button id="revealBtn" disabled onclick="reveal()">Reveal Answers</button>
     <button onclick="repeat()">Repeat Section</button>
 
     <p id="result"></p>
@@ -240,21 +248,23 @@ function play(i,data){
   }
 }
 
-function repeat(){ play(currentSection,collect()); }
+function repeat(){ play(currentSection, lessonCache); }
 
-/* ---------- TEXT ---------- */
+/* ---------- TEXT (FIXED INPUT SYSTEM) ---------- */
 function renderText(data){
   const container=document.getElementById("text");
   container.innerHTML="";
 
   data.sections.forEach((sec,si)=>{
-    const div=document.createElement("div");
+    const line=document.createElement("div");
+    line.className="line";
+
     const parts=sec.text.split("___");
 
     parts.forEach((p,i)=>{
       const span=document.createElement("span");
       span.textContent=p;
-      div.appendChild(span);
+      line.appendChild(span);
 
       if(i<parts.length-1){
         const id=`q${si}_${i}`;
@@ -265,11 +275,11 @@ function renderText(data){
         input.className="gap-input";
         input.id=id;
 
-        div.appendChild(input);
+        line.appendChild(input);
       }
     });
 
-    container.appendChild(div);
+    container.appendChild(line);
   });
 }
 
