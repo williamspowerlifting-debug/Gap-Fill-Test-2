@@ -100,7 +100,7 @@ function loadBuilder(saved){
   lessonCache=saved||null;
 
   app.innerHTML=`
-    <h2>🎧 Lesson Builder</h2>
+    <h2>🎧 Exercise Builder</h2>
 
     <div class="field-instruction">Enter a YouTube or MP4 video link.</div>
     <input id="videoUrl">
@@ -251,7 +251,7 @@ function loadStudent(data,previewMode){
 
   app.innerHTML=`
     ${previewMode?'<button onclick="loadBuilder(lessonCache)">⬅ Back</button>':""}
-    <h2>🎧 Listening Lesson</h2>
+    <h2>🎧 Listening Exercise</h2>
 
     ${data.videoUrl.includes("youtube")
       ?'<div id="player"></div>'
