@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Listening Lesson Builder</title>
+
+<style>
+body{
+  font-family:system-ui;
+  background:#f8fafc;
+  margin:0;
+}
+
+.container{
+  max-width:900px;
+  margin:40px auto;
+  background:white;
+  padding:24px;
+  border-radius:16px;
+}
+
+input, textarea{
+  width:100%;
+  padding:8px;
+  margin:6px 0;
+}
+
+button{
+  padding:10px;
+  margin-top:10px;
+  border:none;
+  background:#4f46e5;
+  color:white;
+  border-radius:8px;
+  cursor:pointer;
+}
+
+.section{
+  background:#f1f5f9;
+  padding:12px;
+  margin:10px 0;
+  border-radius:10px;
+}
+
+.correct{color:green;}
+.incorrect{color:red;}
+</style>
+</head>
+
+<body>
+<div class="container" id="app"></div>
+
+<script>
+
+// ==========================
+// DETECT MODE
+// ==========================
+const urlParams = new URLSearchParams(window.location.search);
+const dataParam = urlParams.get("data");
+
+if(dataParam){
+  loadStudentMode(JSON.parse(atob(dataParam)));
+} else {
+  loadBuilder();
+}
+
+// ==========================
+// BUILDER MODE
+// ==========================
+function loadBuilder(){
+
+  const app = document.getElementById("app");
+
+  app.innerHTML = `
+    <h2>🎧 Lesson Builder</h2>
+
+    <label>Video URL</label>
+    <input id="videoUrl" placeholder="video.mp4 or full URL">
+
+    <h3>Sections</h3>
+    <div id="sections"></div>
+
+    <button onclick="addSection()">+ Add Section</button>
+
+    <br><br>
+    <button onclick="generate()">Generate Lesson Link</button>
+
+    <p id="linkOutput"></p>
+  `;
+
+  addSection();
+}
+
+function addSection(){
+  const container = document.getElementById("sections");
+
+  const div = document.createElement("div");
+  div.className = "section";
+
+  div.innerHTML = `
+    <label>Text (use ___ for gaps)</label>
+    <textarea class="text"></textarea>
+
+    <label>Answers (comma separated)</label>
+    <input class="answers">
+
+    <label>Start time (seconds)</label>
+    <input class="start" type="number">
+
+    <label>End time (seconds)</label>
+    <input class="end" type="number">
+  `;
+
+  container.appendChild(div);
+}
+
+function generate(){
+
+  const videoUrl = document.getElementById("videoUrl").value;
+
+  const sections = [];
+
+  document.querySelectorAll(".section").forEach(sec=>{
+    sections.push({
+      text: sec.querySelector(".text").value,
+      answers: sec.querySelector(".answers").value.split(",").map(a=>a.trim()),
+      start: Number(sec.querySelector(".start").value),
+      end: Number(sec.querySelector(".end").value)
+    });
+  });
+
+  const lesson = {videoUrl, sections};
+
+  const encoded = btoa(JSON.stringify(lesson));
+
+  const link = `${location.origin}${location.pathname}?data=${encoded}`;
+
+  document.getElementById("linkOutput").innerHTML =
+    `<a href="${link}" target="_blank">👉 Open Lesson</a><br><br>
+     Copy link:<br>${link}`;
+}
+
+// ==========================
+// STUDENT MODE
+// ==========================
+function loadStudentMode(data){
+
+  const app = document.getElementById("app");
+
+  let inputIndex = 1;
+  let allAnswers = [];
+
+  app.innerHTML = `
+    <h2>🎧 Listening Practice</h2>
+    <video id="video" controls width="100%" src="${data.videoUrl}"></video>
+    <div id="sections"></div>
+    <button onclick="checkAnswers()">Check Answers</button>
+    <button id="revealBtn" onclick="revealAnswers()" disabled>Reveal Answers</button>
+    <p id="result"></p>
+  `;
+
+  const video = document.getElementById("video");
+  const sectionsDiv = document.getElementById("sections");
+
+  data.sections.forEach((sec,i)=>{
+
+    const div = document.createElement("div");
+    div.className = "section";
+
+    let text = sec.text;
+
+    sec.answers.forEach(ans=>{
+      const inputHTML = `<input id="q${inputIndex}">`;
+      text = text.replace("___", inputHTML);
+      allAnswers.push(ans);
+      inputIndex++;
+    });
+
+    div.innerHTML = `
+      <div onclick="playSection(${sec.start},${sec.end})" style="cursor:pointer;">
+        ▶ ${text}
+      </div>
+    `;
+
+    sectionsDiv.appendChild(div);
+  });
+
+  window.playSection = function(start,end){
+    video.currentTime = start;
+    video.play();
+
+    const interval = setInterval(()=>{
+      if(video.currentTime >= end){
+        video.pause();
+        clearInterval(interval);
+      }
+    },200);
+  };
+
+  window.checkAnswers = function(){
+    let score=0;
+
+    allAnswers.forEach((ans,i)=>{
+      const input=document.getElementById("q"+(i+1));
+
+      if(input.value.toLowerCase().trim()===ans){
+        input.classList.add("correct");
+        input.classList.remove("incorrect");
+        score++;
+      } else {
+        input.classList.add("incorrect");
+        input.classList.remove("correct");
+      }
+    });
+
+    document.getElementById("result").innerText =
+      `Score: ${score} / ${allAnswers.length}`;
+
+    document.getElementById("revealBtn").disabled = false;
+  };
+
+  window.revealAnswers = function(){
+    allAnswers.forEach((ans,i)=>{
+      const input=document.getElementById("q"+(i+1));
+      input.value = ans;
+      input.classList.add("correct");
+    });
+
+    document.getElementById("result").innerText += " | Answers revealed";
+  };
+}
+
+</script>
+
+</body>
+</html>
