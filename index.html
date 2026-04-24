@@ -21,6 +21,7 @@ button{
   background:#4f46e5;color:white;cursor:pointer;
 }
 
+/* 🔘 Reveal disabled state */
 button:disabled{
   background:#d1d5db !important;
   cursor:not-allowed;
@@ -69,13 +70,7 @@ const app=document.getElementById("app");
 let builderPlayer=null, ytPlayer=null, ytReady=false;
 let lessonCache=null, currentSection=0, stopTimer=null;
 let answersMap={}, highlightMode=false;
-let hasChecked=false;
-
-/* ✅ GOOGLE DRIVE SUPPORT */
-function getDriveVideoUrl(url){
-  const match = url.match(/\/d\/([^\/]+)/);
-  return match ? `https://drive.google.com/uc?export=download&id=${match[1]}` : url;
-}
+let hasChecked=false;   /* ✅ NEW FLAG */
 
 /* ---------- YT ---------- */
 function loadYT(cb){
@@ -105,7 +100,7 @@ function loadBuilder(saved){
   lessonCache=saved||null;
 
   app.innerHTML=`
-    <h2>🎧 Lesson Builder</h2>
+    <h2>🎧 Exercise Builder</h2>
 
     <div class="field-instruction">Enter a YouTube or MP4 video link.</div>
     <input id="videoUrl">
@@ -141,9 +136,7 @@ function toggleHighlight(){
 }
 
 function loadVideo(){
-  let url=document.getElementById("videoUrl").value;
-  url = getDriveVideoUrl(url); /* ✅ applied */
-
+  const url=document.getElementById("videoUrl").value;
   const box=document.getElementById("builderVideo");
 
   ytReady=false;
@@ -163,7 +156,94 @@ function getTime(){
   return builderPlayer.currentTime!==undefined ? builderPlayer.currentTime : builderPlayer.getCurrentTime();
 }
 
-/* ---------- STUDENT ---------- */
+/* ---------- SECTION ---------- */
+function addSection(data={}){
+  const div=document.createElement("div");
+  div.className="section-builder";
+
+  div.innerHTML=`
+    <div class="field-instruction">Enter text. Use _ for gaps.</div>
+    <textarea class="text">${data.text||""}</textarea>
+
+    <div class="field-instruction">Answers (comma separated)</div>
+    <input class="answers" value="${(data.answers||[]).join(",")}">
+
+    <div class="gap-warning"></div>
+    <div class="gap-preview"></div>
+
+    <div class="field-instruction">Start time</div>
+    <input class="start" value="${data.start||0}">
+    <button onclick="setStart(this)">Set Start</button>
+
+    <div class="field-instruction">End time</div>
+    <input class="end" value="${data.end||0}">
+    <button onclick="setEnd(this)">Set End</button>
+  `;
+
+  const textarea=div.querySelector(".text");
+  const answers=div.querySelector(".answers");
+
+  textarea.addEventListener("input",()=>validateSection(div));
+  answers.addEventListener("input",()=>validateSection(div));
+
+  document.getElementById("sections").appendChild(div);
+  validateSection(div);
+}
+
+function setStart(btn){ btn.parentElement.querySelector(".start").value=Math.floor(getTime()); }
+function setEnd(btn){ btn.parentElement.querySelector(".end").value=Math.floor(getTime()); }
+
+/* ---------- VALIDATION ---------- */
+function validateSection(div){
+  const text=div.querySelector(".text").value;
+  const answers=div.querySelector(".answers").value;
+
+  const gapCount=(text.match(/_+/g)||[]).length;
+  const answerCount=answers.split(",").map(a=>a.trim()).filter(Boolean).length;
+
+  const warn=div.querySelector(".gap-warning");
+  const preview=div.querySelector(".gap-preview");
+
+  warn.innerText=(gapCount!==answerCount)
+    ? `⚠️ Gaps: ${gapCount} | Answers: ${answerCount} (must match)`
+    : "";
+
+  if(highlightMode){
+    preview.style.display="block";
+    preview.innerHTML=text.replace(/_+/g,'<span class="gap-highlight">___</span>');
+  }
+}
+
+function updateAllValidation(){
+  document.querySelectorAll(".section-builder").forEach(validateSection);
+}
+
+/* ---------- COLLECT ---------- */
+function collect(){
+  return{
+    videoUrl:document.getElementById("videoUrl").value,
+    sections:[...document.querySelectorAll(".section-builder")].map(s=>({
+      text:s.querySelector(".text").value,
+      answers:s.querySelector(".answers").value.split(",").map(a=>a.trim()),
+      start:+s.querySelector(".start").value,
+      end:+s.querySelector(".end").value
+    }))
+  };
+}
+
+/* ---------- PREVIEW ---------- */
+function preview(){
+  loadStudent(collect(), true);
+}
+
+function generate(){
+  const data=encodeURIComponent(JSON.stringify(collect()));
+  const link=`${location.origin}${location.pathname}?data=${data}`;
+  document.getElementById("link").innerHTML=
+    `<b>Lesson Link:</b><br><a href="${link}" target="_blank">${link}</a>`;
+}
+
+/* ---------- STUDENT + PREVIEW ---------- */
 function loadStudent(data,previewMode){
   lessonCache=data;
   answersMap={};
@@ -171,18 +251,18 @@ function loadStudent(data,previewMode){
 
   app.innerHTML=`
     ${previewMode?'<button onclick="loadBuilder(lessonCache)">⬅ Back</button>':""}
-    <h2>🎧 Listening Lesson</h2>
+    <h2>🎧 Listening Exercise</h2>
 
     ${data.videoUrl.includes("youtube")
       ?'<div id="player"></div>'
-      :`<video id="video" controls><source src="${getDriveVideoUrl(data.videoUrl)}"></video>`}
+      :`<video id="video" controls><source src="${data.videoUrl}"></video>`}
 
     <div id="buttons"></div>
     <div id="text"></div>
 
     <button onclick="playAll()">▶ Play All</button>
     <button onclick="checkAnswers()">Check Answers</button>
-    <button id="revealBtn" disabled onclick="reveal()">Reveal Answers</button>
+    <button id="revealBtn" disabled style="background:#d1d5db;color:#6b7280;" onclick="reveal()">Reveal Answers</button>
     <button onclick="repeat()">Repeat Section</button>
 
     <p id="result"></p>
@@ -195,6 +275,143 @@ function loadStudent(data,previewMode){
   renderButtons(data);
   renderText(data);
 }
+
+/* ---------- PLAY ALL ---------- */
+function playAll(){
+  if(!lessonCache) return;
+
+  const data = lessonCache;
+
+  if(ytPlayer){
+    ytPlayer.seekTo(0,true);
+    ytPlayer.playVideo();
+  } else {
+    const v=document.getElementById("video");
+    v.currentTime=0;
+    v.play();
+  }
+}
+
+/* ---------- SECTION BUTTONS ---------- */
+function renderButtons(data){
+  const box=document.getElementById("buttons");
+  box.innerHTML="";
+
+  data.sections.forEach((_,i)=>{
+    const b=document.createElement("button");
+    b.textContent="Play Section "+(i+1);
+    b.onclick=()=>play(i,data);
+    box.appendChild(b);
+  });
+}
+
+/* ---------- TEXT ---------- */
+function renderText(data){
+  const container=document.getElementById("text");
+  container.innerHTML="";
+
+  data.sections.forEach((sec,si)=>{
+    const sectionDiv=document.createElement("div");
+    sectionDiv.id=`section-${si}`;
+
+    const parts=sec.text.split(/_+/g);
+
+    parts.forEach((p,i)=>{
+      sectionDiv.appendChild(document.createTextNode(p));
+
+      if(i<parts.length-1){
+        const wrap=document.createElement("span");
+        wrap.className="gap-wrap";
+
+        const input=document.createElement("input");
+        input.type="text";
+        input.className="gap-input";
+
+        input.id=`q${si}_${i}`;
+        answersMap[input.id]=sec.answers[i]||"";
+
+        wrap.appendChild(input);
+        sectionDiv.appendChild(wrap);
+      }
+    });
+
+    container.appendChild(sectionDiv);
+  });
+}
+
+/* ---------- PLAY ---------- */
+function play(i,data){
+  currentSection=i;
+
+  document.querySelectorAll("#text > div").forEach((d,idx)=>{
+    d.classList.toggle("section-active",idx===i);
+  });
+
+  const sec=data.sections[i];
+
+  if(ytPlayer){
+    ytPlayer.seekTo(sec.start,true);
+    ytPlayer.playVideo();
+
+    clearInterval(stopTimer);
+    stopTimer=setInterval(()=>{
+      if(ytPlayer.getCurrentTime()>=sec.end){
+        ytPlayer.pauseVideo();
+        clearInterval(stopTimer);
+      }
+    },200);
+
+  }else{
+    const v=document.getElementById("video");
+    v.currentTime=sec.start;
+    v.play();
+
+    clearInterval(stopTimer);
+    stopTimer=setInterval(()=>{
+      if(v.currentTime>=sec.end){
+        v.pause();
+        clearInterval(stopTimer);
+      }
+    },200);
+  }
+}
+
+/* ---------- ANSWERS ---------- */
+function checkAnswers(){
+  let score=0;
+
+  Object.keys(answersMap).forEach(id=>{
+    const el=document.getElementById(id);
+    const correct=answersMap[id].toLowerCase();
+    const user=el.value.toLowerCase();
+
+    if(user===correct){
+      el.classList.add("correct");
+      score++;
+    }else{
+      el.classList.add("incorrect");
+    }
+  });
+
+  document.getElementById("result").innerText=
+    `Score: ${score}/${Object.keys(answersMap).length}`;
+
+  hasChecked=true;
+  const btn=document.getElementById("revealBtn");
+  btn.disabled=false;
+  btn.style.background="#4f46e5";
+  btn.style.color="white";
+}
+
+function reveal(){
+  if(!hasChecked) return;
+
+  Object.keys(answersMap).forEach(id=>{
+    document.getElementById(id).value=answersMap[id];
+  });
+}
+
+function repeat(){ play(currentSection,lessonCache); }
 </script>
 </body>
 </html>
