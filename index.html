@@ -1,1 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Listening Lesson Builder</title>
 
+<style>
+body{font-family:system-ui;background:#f8fafc;margin:0;}
+.container{max-width:900px;margin:40px auto;background:white;padding:24px;border-radius:16px;}
+
+video,#player,#builderPlayer{width:100%;}
+
+.section-builder{background:#f1f5f9;padding:12px;margin:12px 0;border-radius:10px;}
+.section-active{outline:2px solid #4f46e5;}
+
+label{font-weight:bold;display:block;margin-top:8px;}
+textarea,input{width:100%;padding:6px;margin-top:4px;}
+
+.instructions{
+  background:#eef2ff;
+  padding:12px;
+  border-radius:10px;
+  margin-bottom:12px;
+  line-height:1.6;
+}
+
+button{
+  padding:8px 12px;margin:4px;border:none;border-radius:6px;
+  background:#4f46e5;color:white;cursor:pointer;
+}
+.secondary{background:#e5e7eb;color:black;}
+
+#text{font-size:18px;line-height:2;margin-top:20px;}
+
+/* ⭐ CONTENTEDITABLE ANSWERS (HIGH RELIABILITY) */
+.gap{
+  display:inline-block;
+  min-width:120px;
+  padding:4px 8px;
+  border-bottom:2px solid #4f46e5;
+  margin:0 4px;
+}
+
+.gap:focus{
+  outline:none;
+  border-bottom:2px solid #10b981;
+}
+
+.correct{border-bottom:2px solid green;}
+.incorrect{border-bottom:2px solid red;}
+</style>
+</head>
+
+<body>
+<div class="container" id="app"></div>
+
+<script>
+const app=document.getElementById("app");
+
+let builderPlayer=null, ytPlayer=null, ytReady=false;
+let lessonCache=null, currentSection=0, stopTimer=null;
+let answersMap={}, checked=false;
+
+/* ---------- YOUTUBE ---------- */
+function loadYT(cb){
+  if(window.YT && YT.Player){ cb(); }
+  else{
+    const tag=document.createElement("script");
+    tag.src="https://www.youtube.com/iframe_api";
+    document.body.appendChild(tag);
+    window.onYouTubeIframeAPIReady=cb;
+  }
+}
+function getYTid(url){
+  const m=url.match(/(?:v=|youtu\.be\/|embed\/)([^&?]+)/);
+  return m?m[1]:null;
+}
+
+/* ---------- ROUTING ---------- */
+const params=new URLSearchParams(location.search);
+const raw=params.get("data");
+
+if(raw){ loadStudent(JSON.parse(decodeURIComponent(raw))); }
+else{ loadBuilder(); }
+
+/* ---------- BUILDER ---------- */
+function loadBuilder(saved){
+  lessonCache=saved||null;
+
+  app.innerHTML=`
+    <h2>🎧 Lesson Builder</h2>
+
+    <div class="instructions">
+      • Paste a YouTube or MP4 link<br>
+      • Use ___ to create gaps<br>
+      • Add answers in order, separated by commas<br>
+      • Click video then press "Set Start / End"<br>
+      • Ensure start is before end
+    </div>
+
+    <label>Video URL</label>
+    <input id="videoUrl">
+
+    <div id="builderVideo"></div>
+
+    <div id="sections"></div>
+
+    <button onclick="addSection()">+ Add Section</button>
+    <button onclick="preview()">Preview</button>
+    <button onclick="generate()">Generate Link</button>
+
+    <p id="link"></p>
+  `;
+
+  document.getElementById("videoUrl").addEventListener("change",loadVideo);
+
+  if(saved){
+    document.getElementById("videoUrl").value=saved.videoUrl;
+    loadVideo();
+    saved.sections.forEach(s=>addSection(s));
+  } else addSection();
+}
+
+function loadVideo(){
+  const url=document.getElementById("videoUrl").value;
+  const box=document.getElementById("builderVideo");
+
+  ytReady=false;
+
+  if(url.includes("youtube")){
+    box.innerHTML=`<div id="builderPlayer"></div>`;
+    loadYT(()=>builderPlayer=new YT.Player("builderPlayer",{videoId:getYTid(url),events:{onReady:()=>ytReady=true}}));
+  } else {
+    box.innerHTML=`<video id="builderPlayer" controls><source src="${url}"></video>`;
+    builderPlayer=document.getElementById("builderPlayer");
+    ytReady=true;
+  }
+}
+
+function getTime(){
+  if(!builderPlayer||!ytReady) return 0;
+  return builderPlayer.currentTime!==undefined ? builderPlayer.currentTime : builderPlayer.getCurrentTime();
+}
+
+function addSection(data={}){
+  const div=document.createElement("div");
+  div.className="section-builder";
+
+  div.innerHTML=`
+    <textarea class="text">${data.text||""}</textarea>
+    <input class="answers" value="${(data.answers||[]).join(",")}">
+    <input class="start" value="${data.start||0}">
+    <button onclick="setStart(this)">Set Start</button>
+    <input class="end" value="${data.end||0}">
+    <button onclick="setEnd(this)">Set End</button>
+  `;
+  document.getElementById("sections").appendChild(div);
+}
+
+function setStart(btn){ btn.parentElement.querySelector(".start").value=Math.floor(getTime()); }
+function setEnd(btn){ btn.parentElement.querySelector(".end").value=Math.floor(getTime()); }
+
+function collect(){
+  return{
+    videoUrl:document.getElementById("videoUrl").value,
+    sections:[...document.querySelectorAll(".section-builder")].map(s=>({
+      text:s.querySelector(".text").value,
+      answers:s.querySelector(".answers").value.split(",").map(a=>a.trim()),
+      start:+s.querySelector(".start").value,
+      end:+s.querySelector(".end").value
+    }))
+  };
+}
+
+function preview(){ loadStudent(collect(),true); }
+
+function generate(){
+  const data=encodeURIComponent(JSON.stringify(collect()));
+  const link=`${location.origin}${location.pathname}?data=${data}`;
+  document.getElementById("link").innerHTML=`<a href="${link}" target="_blank">${link}</a>`;
+}
+
+/* ---------- STUDENT ---------- */
+function loadStudent(data,preview){
+  lessonCache=data;
+  answersMap={}; checked=false;
+
+  app.innerHTML=`
+    <h2>🎧 Listening Lesson</h2>
+    ${preview?'<button onclick="loadBuilder(lessonCache)">⬅ Back</button>':""}
+    ${data.videoUrl.includes("youtube")?'<div id="player"></div>':`<video id="video" controls><source src="${data.videoUrl}"></video>`}
+
+    <div id="buttons"></div>
+    <div id="text"></div>
+
+    <button onclick="checkAnswers()">Check Answers</button>
+    <button id="revealBtn" disabled onclick="reveal()">Reveal Answers</button>
+    <button onclick="repeat()">Repeat Section</button>
+
+    <p id="result"></p>
+  `;
+
+  if(data.videoUrl.includes("youtube")){
+    loadYT(()=>ytPlayer=new YT.Player("player",{videoId:getYTid(data.videoUrl)}));
+  }
+
+  renderButtons(data);
+  renderText(data);
+}
+
+function renderButtons(data){
+  const box=document.getElementById("buttons");
+  data.sections.forEach((_,i)=>{
+    const b=document.createElement("button");
+    b.textContent="Section "+(i+1);
+    b.onclick=()=>play(i,data);
+    box.appendChild(b);
+  });
+}
+
+function play(i,data){
+  currentSection=i;
+  document.querySelectorAll("#text > div").forEach((d,idx)=>d.classList.toggle("section-active",idx===i));
+
+  const sec=data.sections[i];
+
+  if(ytPlayer){
+    ytPlayer.seekTo(sec.start,true);
+    ytPlayer.playVideo();
+    clearInterval(stopTimer);
+    stopTimer=setInterval(()=>{
+      if(ytPlayer.getCurrentTime()>=sec.end){ytPlayer.pauseVideo();clearInterval(stopTimer);}
+    },200);
+  }else{
+    const v=document.getElementById("video");
+    v.currentTime=sec.start;
+    v.play();
+    clearInterval(stopTimer);
+    stopTimer=setInterval(()=>{
+      if(v.currentTime>=sec.end){v.pause();clearInterval(stopTimer);}
+    },200);
+  }
+}
+
+function repeat(){ play(currentSection, lessonCache); }
+
+/* ---------- CONTENTEDITABLE FIX ---------- */
+function renderText(data){
+  const container=document.getElementById("text");
+  container.innerHTML="";
+
+  data.sections.forEach((sec,si)=>{
+    const div=document.createElement("div");
+    const parts=sec.text.split("___");
+
+    parts.forEach((p,i)=>{
+      div.appendChild(document.createTextNode(p));
+
+      if(i<parts.length-1){
+        const span=document.createElement("span");
+        const id=`q${si}_${i}`;
+
+        span.className="gap";
+        span.contentEditable=true;
+        span.id=id;
+
+        answersMap[id]=sec.answers[i]||"";
+
+        div.appendChild(span);
+      }
+    });
+
+    container.appendChild(div);
+  });
+}
+
+/* ---------- CHECK ---------- */
+function checkAnswers(){
+  let score=0;
+  Object.keys(answersMap).forEach(id=>{
+    const el=document.getElementById(id);
+    const correct=answersMap[id].toLowerCase();
+    const user=el.innerText.trim().toLowerCase();
+
+    if(user===correct){
+      el.classList.add("correct");
+      score++;
+    }else{
+      el.classList.add("incorrect");
+    }
+  });
+
+  document.getElementById("result").innerText=`Score: ${score}/${Object.keys(answersMap).length}`;
+  checked=true;
+  document.getElementById("revealBtn").disabled=false;
+}
+
+function reveal(){
+  if(!checked) return;
+  Object.keys(answersMap).forEach(id=>{
+    document.getElementById(id).innerText=answersMap[id];
+  });
+}
+</script>
+</body>
+</html>
