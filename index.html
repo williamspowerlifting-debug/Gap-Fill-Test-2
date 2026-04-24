@@ -21,6 +21,13 @@ button{
   background:#4f46e5;color:white;cursor:pointer;
 }
 
+/* 🔘 Reveal disabled state */
+button:disabled{
+  background:#d1d5db !important;
+  cursor:not-allowed;
+  color:#6b7280;
+}
+
 video, iframe, #player, #builderPlayer{
   width:100%;height:400px;max-width:100%;display:block;
 }
@@ -63,6 +70,7 @@ const app=document.getElementById("app");
 let builderPlayer=null, ytPlayer=null, ytReady=false;
 let lessonCache=null, currentSection=0, stopTimer=null;
 let answersMap={}, highlightMode=false;
+let hasChecked=false;   /* ✅ NEW FLAG */
 
 /* ---------- YT ---------- */
 function loadYT(cb){
@@ -223,6 +231,7 @@ function collect(){
   };
 }
 
+/* ---------- PREVIEW ---------- */
 function preview(){
   loadStudent(collect(), true);
 }
@@ -238,6 +247,7 @@ function generate(){
 function loadStudent(data,previewMode){
   lessonCache=data;
   answersMap={};
+  hasChecked=false;
 
   app.innerHTML=`
     ${previewMode?'<button onclick="loadBuilder(lessonCache)">⬅ Back</button>':""}
@@ -250,8 +260,9 @@ function loadStudent(data,previewMode){
     <div id="buttons"></div>
     <div id="text"></div>
 
+    <button onclick="playAll()">▶ Play All</button>
     <button onclick="checkAnswers()">Check Answers</button>
-    <button id="revealBtn" disabled onclick="reveal()">Reveal Answers</button>
+    <button id="revealBtn" disabled style="background:#d1d5db;color:#6b7280;" onclick="reveal()">Reveal Answers</button>
     <button onclick="repeat()">Repeat Section</button>
 
     <p id="result"></p>
@@ -265,7 +276,13 @@ function loadStudent(data,previewMode){
   renderText(data);
 }
 
-/* ---------- SECTION BUTTONS (NOW IN BOTH STUDENT + PREVIEW) ---------- */
+/* ---------- PLAY ALL ---------- */
+function playAll(){
+  if(!lessonCache) return;
+  play(0,lessonCache);
+}
+
+/* ---------- SECTION BUTTONS ---------- */
 function renderButtons(data){
   const box=document.getElementById("buttons");
   box.innerHTML="";
@@ -312,7 +329,7 @@ function renderText(data){
   });
 }
 
-/* ---------- PLAY + HIGHLIGHT ---------- */
+/* ---------- PLAY ---------- */
 function play(i,data){
   currentSection=i;
 
@@ -369,16 +386,22 @@ function checkAnswers(){
   document.getElementById("result").innerText=
     `Score: ${score}/${Object.keys(answersMap).length}`;
 
-  document.getElementById("revealBtn").disabled=false;
+  hasChecked=true;
+  const btn=document.getElementById("revealBtn");
+  btn.disabled=false;
+  btn.style.background="#4f46e5";
+  btn.style.color="white";
 }
 
 function reveal(){
+  if(!hasChecked) return;
+
   Object.keys(answersMap).forEach(id=>{
     document.getElementById(id).value=answersMap[id];
   });
 }
 
-function repeat(){ play(currentSection, lessonCache); }
+function repeat(){ play(currentSection,lessonCache); }
 </script>
 </body>
 </html>
