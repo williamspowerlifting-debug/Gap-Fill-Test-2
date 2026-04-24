@@ -35,7 +35,6 @@ textarea,input{
   width:100%;
   padding:6px;
   margin-top:4px;
-  box-sizing:border-box;
 }
 
 .instructions{
@@ -45,16 +44,16 @@ textarea,input{
   margin-bottom:15px;
 }
 
-/* FIX: only affects gap inputs */
+.gap{
+  border-bottom:2px solid #333;
+  padding:2px 12px;
+  cursor:pointer;
+}
+
 input.gap-input{
-  width:120px !important;
-  display:inline-block;
   border:none;
   border-bottom:2px solid #333;
-  outline:none;
-  background:transparent;
-  margin:0 4px;
-  padding:2px;
+  width:120px;
 }
 
 .correct{color:green;}
@@ -235,6 +234,7 @@ function renderButtons(){
   });
 }
 
+/* ✅ FIXED FUNCTION ONLY */
 function renderText(){
   const container = document.getElementById("text");
   container.innerHTML = "";
@@ -242,21 +242,36 @@ function renderText(){
   lessonData.sections.forEach((sec, si) => {
 
     let gapIndex = 0;
-
-    let html = sec.text.replace(/___/g, () => {
-      const id = `q${si}_${gapIndex}`;
-
-      answersMap[id] = sec.answers[gapIndex] || "";
-      order.push(id);
-
-      gapIndex++;
-
-      return `<input type="text" id="${id}" class="gap-input" oninput="moveNext('${id}')" />`;
-    });
-
     const div = document.createElement("div");
     div.className = "section";
-    div.innerHTML = html + "<br><br>";
+
+    const parts = sec.text.split("___");
+
+    parts.forEach((part, i) => {
+
+      div.appendChild(document.createTextNode(part));
+
+      if(i < parts.length - 1){
+        const id = `q${si}_${gapIndex}`;
+
+        answersMap[id] = sec.answers[gapIndex] || "";
+        order.push(id);
+
+        const input = document.createElement("input");
+        input.type = "text";
+        input.id = id;
+        input.className = "gap-input";
+
+        input.addEventListener("input", () => moveNext(id));
+
+        div.appendChild(input);
+
+        gapIndex++;
+      }
+    });
+
+    div.appendChild(document.createElement("br"));
+    div.appendChild(document.createElement("br"));
 
     container.appendChild(div);
   });
