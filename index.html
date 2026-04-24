@@ -12,7 +12,11 @@ body{font-family:system-ui;background:#f8fafc;margin:0;}
 .section-builder{background:#f1f5f9;padding:12px;margin:12px 0;border-radius:10px;}
 .section-active{outline:2px solid #4f46e5;}
 
-.field-instruction{font-size:13px;color:#555;margin-top:10px;}
+.field-instruction{
+  font-size:13px;
+  color:#555;
+  margin-top:10px;
+}
 
 textarea,input{width:100%;padding:6px;margin-top:4px;}
 
@@ -21,23 +25,25 @@ button{
   background:#4f46e5;color:white;cursor:pointer;
 }
 
-/* 🔥 CRITICAL FIX: LAYERS */
-.video-layer{
-  position:relative;
-  z-index:1;
+/* ✅ VIDEO FIX */
+video, iframe, #player, #builderPlayer{
+  width:100%;
+  height:400px;
+  max-width:100%;
+  display:block;
 }
 
+/* ✅ TEXT LAYER */
 #text{
-  position:relative;
-  z-index:999; /* ALWAYS ABOVE VIDEO */
   font-size:18px;
   line-height:2;
   margin-top:20px;
 }
 
-/* 🔥 INPUT FIX */
+/* ✅ FINAL GAP FIX */
 .gap-wrap{
   display:inline-block;
+  vertical-align:middle;
   margin:0 6px;
 }
 
@@ -46,17 +52,14 @@ button{
   height:28px;
   border:none;
   border-bottom:2px solid #4f46e5;
-  background:white;
   font-size:16px;
   text-align:center;
   outline:none;
-  position:relative;
-  z-index:1000;
+  background:white;
 }
 
 .gap-input:focus{
   border-bottom:2px solid #10b981;
-  background:#fff;
 }
 
 .correct{border-bottom:2px solid green;}
@@ -72,9 +75,9 @@ const app=document.getElementById("app");
 
 let builderPlayer=null, ytPlayer=null, ytReady=false;
 let lessonCache=null, currentSection=0, stopTimer=null;
-let answersMap={};
+let answersMap={}, checked=false;
 
-/* ---------- YOUTUBE ---------- */
+/* ---------- YT ---------- */
 function loadYT(cb){
   if(window.YT && YT.Player){ cb(); }
   else{
@@ -103,10 +106,10 @@ function loadBuilder(saved){
   app.innerHTML=`
     <h2>🎧 Lesson Builder</h2>
 
-    <div class="field-instruction">Enter video URL</div>
+    <div class="field-instruction">Enter a YouTube or MP4 video link.</div>
     <input id="videoUrl">
 
-    <div id="builderVideo" class="video-layer"></div>
+    <div id="builderVideo"></div>
 
     <div id="sections"></div>
 
@@ -152,15 +155,17 @@ function addSection(data={}){
   div.className="section-builder";
 
   div.innerHTML=`
-    <div class="field-instruction">Text (use ___ for gaps)</div>
+    <div class="field-instruction">Enter text. Use ___ for gaps.</div>
     <textarea class="text">${data.text||""}</textarea>
 
     <div class="field-instruction">Answers (comma separated)</div>
     <input class="answers" value="${(data.answers||[]).join(",")}">
 
+    <div class="field-instruction">Start time</div>
     <input class="start" value="${data.start||0}">
     <button onclick="setStart(this)">Set Start</button>
 
+    <div class="field-instruction">End time</div>
     <input class="end" value="${data.end||0}">
     <button onclick="setEnd(this)">Set End</button>
   `;
@@ -187,21 +192,20 @@ function preview(){ loadStudent(collect(),true); }
 function generate(){
   const data=encodeURIComponent(JSON.stringify(collect()));
   const link=`${location.origin}${location.pathname}?data=${data}`;
-  document.getElementById("link").innerHTML=`<b>Lesson Link:</b><br><a href="${link}" target="_blank">${link}</a>`;
+  document.getElementById("link").innerHTML=
+    `<b>Lesson Link:</b><br><a href="${link}" target="_blank">${link}</a>`;
 }
 
 /* ---------- STUDENT ---------- */
 function loadStudent(data,preview){
   lessonCache=data;
-  answersMap={};
+  answersMap={}; checked=false;
 
   app.innerHTML=`
     ${preview?'<button onclick="loadBuilder(lessonCache)">⬅ Back</button>':""}
     <h2>🎧 Listening Lesson</h2>
 
-    <div class="video-layer">
-      ${data.videoUrl.includes("youtube")?'<div id="player"></div>':`<video id="video" controls><source src="${data.videoUrl}"></video>`}
-    </div>
+    ${data.videoUrl.includes("youtube")?'<div id="player"></div>':`<video id="video" controls><source src="${data.videoUrl}"></video>`}
 
     <div id="buttons"></div>
     <div id="text"></div>
@@ -233,21 +237,31 @@ function renderButtons(data){
 
 function play(i,data){
   currentSection=i;
+  document.querySelectorAll("#text > div").forEach((d,idx)=>d.classList.toggle("section-active",idx===i));
+
   const sec=data.sections[i];
 
   if(ytPlayer){
     ytPlayer.seekTo(sec.start,true);
     ytPlayer.playVideo();
+    clearInterval(stopTimer);
+    stopTimer=setInterval(()=>{
+      if(ytPlayer.getCurrentTime()>=sec.end){ytPlayer.pauseVideo();clearInterval(stopTimer);}
+    },200);
   }else{
     const v=document.getElementById("video");
     v.currentTime=sec.start;
     v.play();
+    clearInterval(stopTimer);
+    stopTimer=setInterval(()=>{
+      if(v.currentTime>=sec.end){v.pause();clearInterval(stopTimer);}
+    },200);
   }
 }
 
 function repeat(){ play(currentSection, lessonCache); }
 
-/* ---------- FINAL ANSWER FIX ---------- */
+/* ---------- FINAL INPUT FIX ---------- */
 function renderText(data){
   const container=document.getElementById("text");
   container.innerHTML="";
@@ -260,6 +274,9 @@ function renderText(data){
       div.appendChild(document.createTextNode(p));
 
       if(i<parts.length-1){
+        const wrap=document.createElement("span");
+        wrap.className="gap-wrap";
+
         const input=document.createElement("input");
         input.type="text";
         input.className="gap-input";
@@ -268,7 +285,8 @@ function renderText(data){
         input.id=id;
         answersMap[id]=sec.answers[i]||"";
 
-        div.appendChild(input);
+        wrap.appendChild(input);
+        div.appendChild(wrap);
       }
     });
 
@@ -276,17 +294,27 @@ function renderText(data){
   });
 }
 
+/* ---------- CHECK ---------- */
 function checkAnswers(){
-  let attempted=false;
+  let score=0, attempted=false;
 
   Object.keys(answersMap).forEach(id=>{
     const el=document.getElementById(id);
     if(el.value.trim()!=="") attempted=true;
+
+    const correct=answersMap[id].toLowerCase();
+    const user=el.value.toLowerCase();
+
+    if(user===correct){
+      el.classList.add("correct");
+      score++;
+    }else{
+      el.classList.add("incorrect");
+    }
   });
 
-  if(attempted){
-    document.getElementById("revealBtn").disabled=false;
-  }
+  document.getElementById("result").innerText=`Score: ${score}/${Object.keys(answersMap).length}`;
+  if(attempted) document.getElementById("revealBtn").disabled=false;
 }
 
 function reveal(){
