@@ -7,7 +7,7 @@
 
 <style>
 body{font-family:system-ui;background:#f8fafc;margin:0;}
-.container{max-width:900px;margin:40px auto;background:white;padding:24px;border-radius:16px;position:relative;}
+.container{max-width:900px;margin:40px auto;background:white;padding:24px;border-radius:16px;}
 
 video,#player,#builderPlayer{
   width:100%;
@@ -22,21 +22,29 @@ video,#player,#builderPlayer{
   border-radius:10px;
 }
 
+label{font-weight:bold;display:block;margin-top:8px;}
+
 textarea,input{
   width:100%;
   padding:6px;
   margin-top:4px;
 }
 
-/* CRITICAL FIX */
+.instructions{
+  background:#eef2ff;
+  padding:12px;
+  border-radius:10px;
+  margin-bottom:12px;
+}
+
+/* FINAL INPUT FIX */
 input.gap-input{
   display:inline-block;
   width:200px !important;
   border:1px solid #333;
   background:white;
-  position:relative;
-  z-index:5;
-  margin:4px;
+  margin:0 6px;
+  vertical-align:middle;
 }
 
 button{
@@ -44,7 +52,7 @@ button{
   background:#4f46e5;color:white;cursor:pointer;
 }
 
-#text{font-size:18px;line-height:1.8;margin-top:20px;}
+#text{font-size:18px;line-height:2;margin-top:20px;}
 </style>
 </head>
 
@@ -58,15 +66,15 @@ let builderPlayer=null;
 let ytPlayer=null;
 let ytReady=false;
 
-/* ---------- YOUTUBE SAFE LOADER ---------- */
-function loadYT(callback){
+/* ---------- YOUTUBE ---------- */
+function loadYT(cb){
   if(window.YT && YT.Player){
-    callback();
+    cb();
   }else{
     const prev=window.onYouTubeIframeAPIReady;
     window.onYouTubeIframeAPIReady=()=>{
       if(prev) prev();
-      callback();
+      cb();
     };
     if(!document.querySelector('script[src*="youtube.com/iframe_api"]')){
       const tag=document.createElement("script");
@@ -94,16 +102,24 @@ if(raw){
 /* ---------- BUILDER ---------- */
 function loadBuilder(saved){
   app.innerHTML=`
-    <h2>Lesson Builder</h2>
+    <h2>🎧 Lesson Builder</h2>
+
+    <div class="instructions">
+      • Paste a YouTube or MP4 link<br>
+      • Use ___ to create gaps<br>
+      • Add answers in order, separated by commas<br>
+      • Use video + buttons to set start/end times
+    </div>
 
     <label>Video URL</label>
     <input id="videoUrl">
 
     <div id="builderVideo"></div>
 
+    <h3>Sections</h3>
     <div id="sections"></div>
 
-    <button onclick="addSection()">Add Section</button>
+    <button onclick="addSection()">+ Add Section</button>
     <button onclick="preview()">Preview</button>
     <button onclick="generate()">Generate Link</button>
 
@@ -135,10 +151,9 @@ function loadVideo(){
     loadYT(()=>{
       builderPlayer=new YT.Player("builderPlayer",{
         videoId:id,
-        events:{ onReady:()=>ytReady=true }
+        events:{onReady:()=>ytReady=true}
       });
     });
-
   }else{
     box.innerHTML=`<video id="builderPlayer" controls><source src="${url}"></video>`;
     builderPlayer=document.getElementById("builderPlayer");
@@ -151,9 +166,9 @@ function getTime(){
     alert("Video not ready");
     return 0;
   }
-  if(builderPlayer.currentTime!==undefined) return builderPlayer.currentTime;
-  if(builderPlayer.getCurrentTime) return builderPlayer.getCurrentTime();
-  return 0;
+  return builderPlayer.currentTime!==undefined
+    ? builderPlayer.currentTime
+    : builderPlayer.getCurrentTime();
 }
 
 function addSection(data={}){
@@ -161,10 +176,17 @@ function addSection(data={}){
   div.className="section-builder";
 
   div.innerHTML=`
+    <label>Text (use ___ for gaps)</label>
     <textarea class="text">${data.text||""}</textarea>
+
+    <label>Answers (comma separated)</label>
     <input class="answers" value="${(data.answers||[]).join(",")}">
+
+    <label>Start Time</label>
     <input class="start" value="${data.start||0}">
     <button onclick="setStart(this)">Set Start</button>
+
+    <label>End Time</label>
     <input class="end" value="${data.end||0}">
     <button onclick="setEnd(this)">Set End</button>
   `;
@@ -209,38 +231,37 @@ function generate(){
 /* ---------- STUDENT ---------- */
 function loadStudent(data,preview){
   app.innerHTML=`
-    <h2>Lesson</h2>
-    ${preview?'<button onclick="loadBuilder(data)">Back</button>':""}
-    ${data.videoUrl.includes("youtube")?'<div id="player"></div>':`<video id="video" controls><source src="${data.videoUrl}"></video>`}
+    <h2>🎧 Listening Lesson</h2>
+    ${preview?'<button onclick="loadBuilder(data)">⬅ Back</button>':""}
+    ${data.videoUrl.includes("youtube")?'<div id="player"></div>':`<video controls><source src="${data.videoUrl}"></video>`}
     <div id="text"></div>
   `;
 
   if(data.videoUrl.includes("youtube")){
-    loadYT(()=>{
-      ytPlayer=new YT.Player("player",{videoId:getYTid(data.videoUrl)});
-    });
+    loadYT(()=>{ ytPlayer=new YT.Player("player",{videoId:getYTid(data.videoUrl)}); });
   }
 
   renderText(data);
 }
 
-/* ---------- GAP INPUT FIX ---------- */
+/* ---------- FINAL GAP FIX ---------- */
 function renderText(data){
   const container=document.getElementById("text");
   container.innerHTML="";
 
-  data.sections.forEach((sec,si)=>{
+  data.sections.forEach(sec=>{
     const div=document.createElement("div");
     const parts=sec.text.split("___");
 
     parts.forEach((p,i)=>{
-      div.appendChild(document.createTextNode(p));
+      const span=document.createElement("span");
+      span.textContent=p;
+      div.appendChild(span);
 
       if(i<parts.length-1){
         const input=document.createElement("input");
         input.type="text";
         input.className="gap-input";
-
         div.appendChild(input);
       }
     });
