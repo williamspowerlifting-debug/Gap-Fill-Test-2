@@ -10,7 +10,7 @@ body{font-family:system-ui;background:#f8fafc;margin:0;}
 .container{max-width:900px;margin:40px auto;background:white;padding:24px;border-radius:16px;}
 
 .section-builder{background:#f1f5f9;padding:12px;margin:12px 0;border-radius:10px;}
-.section-active{outline:2px solid #4f46e5;}
+.section-active{outline:2px solid #4f46e5;background:#eef2ff;padding:6px;border-radius:6px;}
 
 .field-instruction{font-size:13px;color:#555;margin-top:10px;}
 
@@ -39,26 +39,17 @@ video, iframe, #player, #builderPlayer{
 .correct{border-bottom:2px solid green;}
 .incorrect{border-bottom:2px solid red;}
 
-.gap-warning{
-  font-size:12px;
-  margin-top:6px;
-  color:#b45309;
-}
+.gap-warning{font-size:12px;margin-top:6px;color:#b45309;}
 
 .gap-preview{
-  margin-top:6px;
-  font-size:13px;
-  background:#fff;
-  padding:6px;
-  border-radius:6px;
-  border:1px solid #e5e7eb;
-  display:none;
+  margin-top:6px;font-size:13px;
+  background:#fff;padding:6px;border-radius:6px;
+  border:1px solid #e5e7eb;display:none;
 }
 
 .gap-highlight{
   background:#fde68a;
-  padding:0 2px;
-  border-radius:3px;
+  padding:0 2px;border-radius:3px;
 }
 </style>
 </head>
@@ -83,6 +74,7 @@ function loadYT(cb){
     window.onYouTubeIframeAPIReady=cb;
   }
 }
+
 function getYTid(url){
   const m=url.match(/(?:v=|youtu\.be\/|embed\/)([^&?]+)/);
   return m?m[1]:null;
@@ -204,11 +196,9 @@ function validateSection(div){
   const warn=div.querySelector(".gap-warning");
   const preview=div.querySelector(".gap-preview");
 
-  if(gapCount!==answerCount){
-    warn.innerText=`⚠️ Gaps: ${gapCount} | Answers: ${answerCount} (must match)`;
-  }else{
-    warn.innerText="";
-  }
+  warn.innerText = (gapCount!==answerCount)
+    ? `⚠️ Gaps: ${gapCount} | Answers: ${answerCount} (must match)`
+    : "";
 
   if(highlightMode){
     preview.style.display="block";
@@ -242,7 +232,7 @@ function generate(){
     `<b>Lesson Link:</b><br><a href="${link}" target="_blank">${link}</a>`;
 }
 
-/* ---------- STUDENT MODE ---------- */
+/* ---------- STUDENT ---------- */
 function loadStudent(data,preview){
   lessonCache=data;
   answersMap={};
@@ -251,7 +241,9 @@ function loadStudent(data,preview){
     ${preview?'<button onclick="loadBuilder(lessonCache)">⬅ Back</button>':""}
     <h2>🎧 Listening Lesson</h2>
 
-    ${data.videoUrl.includes("youtube")?'<div id="player"></div>':`<video id="video" controls><source src="${data.videoUrl}"></video>`}
+    ${data.videoUrl.includes("youtube")
+      ?'<div id="player"></div>'
+      :`<video id="video" controls><source src="${data.videoUrl}"></video>`}
 
     <div id="buttons"></div>
     <div id="text"></div>
@@ -267,21 +259,36 @@ function loadStudent(data,preview){
     loadYT(()=>ytPlayer=new YT.Player("player",{videoId:getYTid(data.videoUrl)}));
   }
 
+  renderButtons(data);
   renderText(data);
 }
 
-/* ---------- TEXT RENDER (FIXED GAPS) ---------- */
+/* ---------- SECTION BUTTONS (RESTORED) ---------- */
+function renderButtons(data){
+  const box=document.getElementById("buttons");
+  box.innerHTML="";
+
+  data.sections.forEach((_,i)=>{
+    const b=document.createElement("button");
+    b.textContent="Play Section "+(i+1);
+    b.onclick=()=>play(i,data);
+    box.appendChild(b);
+  });
+}
+
+/* ---------- TEXT ---------- */
 function renderText(data){
   const container=document.getElementById("text");
   container.innerHTML="";
 
   data.sections.forEach((sec,si)=>{
-    const div=document.createElement("div");
+    const sectionDiv=document.createElement("div");
+    sectionDiv.id=`section-${si}`;
 
     const parts=sec.text.split(/_+/g);
 
     parts.forEach((p,i)=>{
-      div.appendChild(document.createTextNode(p));
+      sectionDiv.appendChild(document.createTextNode(p));
 
       if(i<parts.length-1){
         const wrap=document.createElement("span");
@@ -295,15 +302,54 @@ function renderText(data){
         answersMap[input.id]=sec.answers[i]||"";
 
         wrap.appendChild(input);
-        div.appendChild(wrap);
+        sectionDiv.appendChild(wrap);
       }
     });
 
-    container.appendChild(div);
+    container.appendChild(sectionDiv);
   });
 }
 
-/* ---------- CHECK ---------- */
+/* ---------- PLAY + HIGHLIGHT ---------- */
+function play(i,data){
+  currentSection=i;
+
+  document.querySelectorAll("#text > div").forEach((d,idx)=>{
+    d.classList.toggle("section-active",idx===i);
+  });
+
+  const sec=data.sections[i];
+
+  if(ytPlayer){
+    ytPlayer.seekTo(sec.start,true);
+    ytPlayer.playVideo();
+
+    clearInterval(stopTimer);
+    stopTimer=setInterval(()=>{
+      if(ytPlayer.getCurrentTime()>=sec.end){
+        ytPlayer.pauseVideo();
+        clearInterval(stopTimer);
+      }
+    },200);
+
+  }else{
+    const v=document.getElementById("video");
+    v.currentTime=sec.start;
+    v.play();
+
+    clearInterval(stopTimer);
+    stopTimer=setInterval(()=>{
+      if(v.currentTime>=sec.end){
+        v.pause();
+        clearInterval(stopTimer);
+      }
+    },200);
+  }
+}
+
+function repeat(){ play(currentSection,lessonCache); }
+
+/* ---------- ANSWERS ---------- */
 function checkAnswers(){
   let score=0;
 
@@ -331,8 +377,6 @@ function reveal(){
     document.getElementById(id).value=answersMap[id];
   });
 }
-
-function repeat(){ }
 </script>
 </body>
 </html>
