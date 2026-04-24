@@ -279,7 +279,17 @@ function loadStudent(data,previewMode){
 /* ---------- PLAY ALL ---------- */
 function playAll(){
   if(!lessonCache) return;
-  play(0,lessonCache);
+
+  const data = lessonCache;
+
+  if(ytPlayer){
+    ytPlayer.seekTo(0,true);
+    ytPlayer.playVideo();
+  } else {
+    const v=document.getElementById("video");
+    v.currentTime=0;
+    v.play();
+  }
 }
 
 /* ---------- SECTION BUTTONS ---------- */
