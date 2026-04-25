@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Listening Lesson Builder</title>
+<title>Listening Exercise Builder</title>
 
 <style>
 body{font-family:system-ui;background:#f8fafc;margin:0;}
@@ -104,7 +104,12 @@ function loadBuilder(saved){
 
   app.innerHTML=`
     <h2>🎧 Exercise Builder</h2>
-
+<div style="background:#fef3c7;padding:10px;border-radius:8px;margin-bottom:12px;font-size:14px;">
+  <b>Supported video formats:</b><br>
+  • YouTube links (recommended)<br>
+  • Direct .mp4 video links<br><br>
+  ⚠️ Links from Google Drive, Dropbox, or other platforms may not work.
+</div>
     <div class="field-instruction">Enter a YouTube or MP4 video link.</div>
     <input id="videoUrl">
 
